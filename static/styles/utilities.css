@@ -1,0 +1,57 @@
+#toast {
+  position: fixed;
+  bottom: 25px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #183444;
+  color: white;
+  font-size: 12px;
+  border-radius: 7px;
+  padding: 13px 20px;
+  z-index: 80;
+  display: none;
+}
+.loading {
+  padding: 80px;
+  text-align: center;
+  color: var(--muted);
+}
+.table-scroll {
+  overflow: auto;
+}
+.mobile-label {
+  display: none;
+}
+.activity-dot {
+  color: #6cae8e;
+  margin-right: 8px;
+}
+.error-text {
+  color: #b05151;
+}
+button.link {
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-size: 11px;
+  padding: 0;
+}
+.progress {
+  display: flex;
+  gap: 3px;
+  margin: 18px 0 12px;
+  height: 100px;
+  align-items: end;
+}
+.progress > div {
+  flex: 1;
+  background: #8daee4;
+  border-radius: 3px 3px 0 0;
+  min-height: 5px;
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #96a4b3;
+}

@@ -1,0 +1,89 @@
+.drawer-wrap {
+  justify-content: flex-end;
+  padding: 0;
+}
+.drawer {
+  width: 560px;
+  height: 100%;
+  background: white;
+  overflow: auto;
+  box-shadow: -10px 0 40px #10243b22;
+}
+.profile-hero {
+  padding: 30px;
+}
+.profile-hero .avatar {
+  width: 55px;
+  height: 55px;
+  font-size: 17px;
+  margin-bottom: 17px;
+}
+.profile-hero h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+.profile-stats {
+  display: flex;
+  gap: 30px;
+  margin-top: 22px;
+}
+.profile-stats strong {
+  display: block;
+  font-size: 19px;
+}
+.profile-stats small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.profile-section {
+  padding: 24px 30px;
+  border-top: 1px solid var(--line);
+}
+.profile-section h3 {
+  margin-bottom: 18px;
+}
+.trait-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 0;
+  font-size: 11px;
+  gap: 15px;
+}
+.trait-row span:first-child {
+  color: #8293a6;
+}
+.trait-row span:last-child {
+  word-break: break-word;
+  text-align: right;
+}
+.timeline-item {
+  border-left: 1px solid #dce6f0;
+  padding: 0 0 23px 20px;
+  position: relative;
+}
+.timeline-item:before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #89a9d8;
+}
+.timeline-item strong {
+  font-size: 11px;
+}
+.timeline-item small {
+  float: right;
+  font-size: 9px;
+  color: var(--muted);
+}
+.timeline-item p {
+  font-size: 10px;
+  line-height: 1.8;
+  color: #8393a6;
+  margin: 6px 0 0;
+  word-break: break-word;
+}

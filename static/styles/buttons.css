@@ -1,0 +1,35 @@
+.button {
+  border: 1px solid #dce3ea;
+  background: white;
+  padding: 10px 15px;
+  border-radius: 6px;
+  color: #425569;
+  font-size: 12px;
+  font-weight: 550;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.button:hover {
+  background: #f3f6fb;
+}
+.button.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: white;
+}
+.button.primary:hover {
+  background: #2155c2;
+}
+.button.danger {
+  color: #b34444;
+}
+.button.small {
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

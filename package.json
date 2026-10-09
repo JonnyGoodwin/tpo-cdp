@@ -1,0 +1,20 @@
+{
+  "name": "tpo-cdp",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "test": "node --test",
+    "test:browser": "node scripts/smoke-browser.js",
+    "format": "prettier --write server.js src static scripts tests package.json README.md",
+    "format:check": "prettier --check server.js src static scripts tests package.json README.md"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "prettier": "^3.9.9"
+  }
+}
