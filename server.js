@@ -1,3 +1,4 @@
+import { startRunner } from "./src/connections/runner.js";
 import { mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, dirname } from "node:path";
@@ -9,6 +10,7 @@ const dataDir = process.env.CDP_DATA_DIR || join(root, "data");
 mkdirSync(dataDir, { recursive: true });
 const cdp = new CDP(join(dataDir, "cdp.sqlite"));
 seed(cdp, root);
+startRunner(cdp);
 const server = createServer(cdp, root);
 const port = Number(process.env.PORT || 8787);
 server.listen(port, "127.0.0.1", () =>

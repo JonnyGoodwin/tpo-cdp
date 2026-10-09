@@ -1,0 +1,38 @@
+.connection-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+.connection-editor textarea {
+  width: 100%;
+  border: 1px solid #dfe5ed;
+  border-radius: 6px;
+  padding: 14px;
+  font:
+    12px/1.7 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  resize: vertical;
+  tab-size: 2;
+}
+.code-editor {
+  min-height: 280px;
+  background: #122737;
+  color: #e6edf2;
+}
+.settings-editor {
+  min-height: 80px;
+}
+.connection-editor input[type="checkbox"] {
+  margin-right: 8px;
+}
+.run-result {
+  max-width: 400px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}

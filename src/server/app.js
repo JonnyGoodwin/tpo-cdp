@@ -1,3 +1,4 @@
+import { handle as connections } from "./routes/connections.js";
 import http from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
@@ -7,7 +8,14 @@ import { handle as people } from "./routes/people.js";
 import { handle as imports } from "./routes/imports.js";
 import { handle as segments } from "./routes/segments.js";
 import { handle as exportPeople } from "./routes/export.js";
-const pages = new Set(["/", "/people", "/segments", "/sources", "/attributes"]);
+const pages = new Set([
+  "/",
+  "/people",
+  "/segments",
+  "/sources",
+  "/attributes",
+  "/connections",
+]);
 export function createServer(cdp, root) {
   return http.createServer(async (req, res) => {
     try {
@@ -23,6 +31,7 @@ export function createServer(cdp, root) {
         imports,
         segments,
         exportPeople,
+        connections,
       ]) {
         if ((await handle(req, res, url, cdp)) !== false) return;
       }

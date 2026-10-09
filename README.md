@@ -14,13 +14,24 @@ Open **http://localhost:8787**. Set `PORT` to change the port. The server binds 
 
 ## Use
 
-Each page has its own URL: Overview (`/`), People (`/people`), Segments (`/segments`), Sources & imports (`/sources`), and Attributes (`/attributes`). Pages support direct links, refresh, and browser back/forward navigation.
+Each page has its own URL: Overview (`/`), People (`/people`), Segments (`/segments`), Sources & imports (`/sources`), Attributes (`/attributes`), and Connections (`/connections`). Pages support direct links, refresh, and browser back/forward navigation.
 
 - **Overview:** audience totals, source summaries, and recently active people.
-- **People:** search emails and identities, filter by segment, inspect attributes and linked identities, browse event timelines, select profiles, and export filtered or selected people to CSV.
+- **People:** search emails and identities, filter by segment, inspect attributes and linked identities, browse event timelines, select profiles, and export filtered or selected people to CSV, push them to a Connection.
 - **Segments:** live audiences using all/any conditions, nested groups, attribute comparisons, dates, event counts, and event name/property matches. Preview membership before saving; edit and delete saved segments.
 - **Sources & imports:** upload CSV → choose a source and row type → map columns → validate → review projected changes → import. Click past imports to see saved mappings and rejected record numbers.
 - **Attributes:** inspect source namespaces, inferred display types, examples, and population counts.
+- **Connections:** write functions, select audiences, enable automatic entry triggers, manually push people, and inspect run history.
+
+## Connections
+
+Open `/connections`, create a Connection, and write the body of an async JavaScript function. It receives `user` (a profile snapshot) and `context`, containing `fetch`, `settings`, `log`, and a unique `runId`. Settings are a JSON object of strings; API keys belong here rather than in the function source. Saved values are not returned by the listing API. They are stored locally in the ignored SQLite database, including snapshots for queued calls; they are not encrypted at rest. Only write trusted functions: workers enforce a 30-second timeout and memory limit, but are not a security sandbox.
+
+Select a segment and enable the automatic trigger to run when a profile enters that audience. Existing members become the baseline without being pushed. Imports and segment edits detect entries immediately; a five-second check also handles changes from enrichment or time-based rules. Reimporting unchanged members does not queue another call; leaving and later re-entering queues a new call. Pausing and re-enabling starts with the current audience as the baseline. Check “Also push the current audience when I save” to explicitly backfill existing members.
+
+From People, use **Push audience** for the current filtered audience, or select rows and use **Push** for just those people. Manual pushes work even when the automatic trigger is off. Every call stores its code, settings, and profile snapshot so later edits do not change queued calls. Calls run sequentially while the server is running. Queued calls survive restarts; interrupted calls become failed and are not automatically retried because an external action may already have happened. Run history shows the latest 100 calls, results, and errors. Use `context.runId` as an idempotency key where a destination supports one.
+
+Set the Connection’s Source namespace to `pdl`. Returning `{ traits: { job_title: "Editor" } }` then saves attributes under `pdl/job_title`, preserving attributes from other sources. These traits can be used in segment rules. Starter templates use [Beehiiv’s create-subscription API](https://developers.beehiiv.com/api-reference/subscriptions/create) and [People Data Labs’ person-enrichment API](https://docs.peopledatalabs.com/docs/person-enrichment-api). Supply your own service credentials. Failed service responses are recorded as failed calls.
 
 ## Import rules
 
@@ -34,12 +45,13 @@ Each event is deduplicated by a hash of its source, mapped identities, timestamp
 
 The supplied subscriber file contains eight empty records and two malformed emails; these are reported as rejected. The valid data produces 3,558 profiles (2,930 identified and 628 anonymous) and 10,000 events.
 
-This is a local single-workspace application. It does not yet include multi-user authentication, hosted deployment, live vendor connectors, or account/company entities.
+This is a local single-workspace application. It does not yet include multi-user authentication, hosted deployment or account/company entities.
 
 ## Code layout
 
 - `server.js`: startup, database location, and server binding.
 - `src/cdp/`: SQLite access, CSV parsing and mapping, imports, profile queries, and segmentation.
+- `src/connections/`: durable audience membership and run queue, function workers, and execution history.
 - `src/server/`: initial data loading, HTTP helpers, and API routes grouped by feature.
 - `static/app.js`: frontend startup, page routing, and shared event handling.
 - `static/pages/`: one module per page.

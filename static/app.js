@@ -1,3 +1,5 @@
+import { connections } from "./pages/connections.js";
+import { pushPeople } from "./dialogs/connections.js";
 import {
   $,
   esc,
@@ -25,6 +27,7 @@ function render() {
     segments: "Segments",
     sources: "Sources & imports",
     attributes: "Attributes",
+    connections: "Connections",
   };
   $("#breadcrumb").innerHTML = `Workspace <b>/</b> ${names[state.view]}`;
   document
@@ -38,6 +41,7 @@ function render() {
     segments: segments,
     sources: sources,
     attributes: attributes,
+    connections,
   })[state.view]();
 }
 
@@ -74,6 +78,10 @@ document.addEventListener("click", async (e) => {
       state.page++;
       people();
     }
+    if (action === "push")
+      await pushPeople(
+        state.selected.size ? [...state.selected] : filtered().map((p) => p.id),
+      );
     if (action === "export") {
       const ids = state.selected.size
         ? [...state.selected]
@@ -136,7 +144,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Tab" && $('#overlay [role="dialog"]')) {
     const els = [
       ...$("#overlay").querySelectorAll(
-        "button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href]",
+        "button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]",
       ),
     ];
     const first = els[0],

@@ -1,4 +1,4 @@
-import { chromium } from "@playwright/test";
+import { chromium, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -52,6 +52,7 @@ try {
     ["/segments", "Segments"],
     ["/sources", "Sources & imports"],
     ["/attributes", "Attributes"],
+    ["/connections", "Connections"],
   ]) {
     const response = await page.goto(base + route);
     assert.equal(response.status(), 200);
@@ -194,6 +195,114 @@ try {
   await page.keyboard.press("Escape");
   await page.locator('#nav [data-view="attributes"]').click();
   await page.getByText("score", { exact: true }).waitFor();
+  const connectionAudience = await (
+    await page.request.post(base + "/api/segments", {
+      data: {
+        name: "Connection QA audience",
+        definition: {
+          mode: "all",
+          rules: [
+            { field: "email", op: "eq", value: "connection-qa@example.com" },
+          ],
+        },
+      },
+    })
+  ).json();
+  await page.goto(base + "/connections");
+  await page.getByRole("button", { name: "New connection" }).click();
+  await page.getByLabel("Connection name").fill("Browser QA connection");
+  await page.getByLabel("Source namespace", { exact: true }).fill("pdl");
+  await page
+    .getByLabel("JavaScript function body")
+    .fill("context.log(user.email); return { traits: { tested: true } };");
+  await page
+    .getByLabel("Audience", { exact: true })
+    .selectOption(connectionAudience.id);
+  await page
+    .getByLabel("Run automatically whenever someone joins this audience")
+    .check();
+  await page
+    .getByRole("button", { name: "Save connection", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "Browser QA connection", exact: true })
+    .waitFor();
+  const connection = (
+    await (await page.request.get(base + "/api/connections")).json()
+  ).connections[0];
+  assert.equal(connection.enabled, 1);
+  assert.equal(
+    (
+      await (
+        await page.request.get(`${base}/api/connections/${connection.id}/runs`)
+      ).json()
+    ).runs.length,
+    0,
+  );
+  const committed = await page.request.post(base + "/api/import", {
+    data: { source: "connection_qa", text: "email\nconnection-qa@example.com" },
+  });
+  assert.equal(committed.status(), 200);
+  await expect
+    .poll(
+      async () => {
+        const { runs } = await (
+          await page.request.get(
+            `${base}/api/connections/${connection.id}/runs`,
+          )
+        ).json();
+        return runs.some((run) => run.status === "succeeded");
+      },
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  await page.getByRole("button", { name: "Run history" }).click();
+  await page
+    .getByText("succeeded", { exact: true })
+    .waitFor({ timeout: 5000 })
+    .catch(async (error) => {
+      console.log(
+        "Run history debug:",
+        await page.locator("#toast").innerText(),
+        await page.locator("#overlay").innerText(),
+      );
+      throw error;
+    });
+  await page.keyboard.press("Escape");
+  await page.goto(base + "/people");
+  await page
+    .getByPlaceholder("Search by email, name, or identity…")
+    .fill("connection-qa@example.com");
+  await page.getByRole("button", { name: "Push audience" }).click();
+  await page
+    .getByLabel("Connection", { exact: true })
+    .selectOption(connection.id);
+  await page.getByRole("button", { name: "Push 1 people" }).click();
+  await expect
+    .poll(
+      async () => {
+        const { runs } = await (
+          await page.request.get(
+            `${base}/api/connections/${connection.id}/runs`,
+          )
+        ).json();
+        return (
+          runs.length === 2 && runs.every((run) => run.status === "succeeded")
+        );
+      },
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  const enrichedState = await (
+    await page.request.get(base + "/api/state")
+  ).json();
+  assert.equal(
+    enrichedState.profiles.find((p) => p.email === "connection-qa@example.com")
+      .traits["pdl/tested"],
+    true,
+  );
+  await page.request.delete(`${base}/api/connections/${connection.id}`);
+  await page.request.delete(`${base}/api/segments/${connectionAudience.id}`);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#nav [data-view="overview"]').click();
   await page

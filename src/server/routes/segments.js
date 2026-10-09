@@ -1,3 +1,4 @@
+import { sync } from "../../connections/store.js";
 import { randomUUID } from "node:crypto";
 import { send, body } from "../http.js";
 export async function handle(req, res, url, cdp) {
@@ -22,10 +23,16 @@ export async function handle(req, res, url, cdp) {
       String(b.name).trim().slice(0, 100),
       JSON.stringify(b.definition),
     );
+    sync(cdp);
     return send(res, { id });
   }
   if (req.method === "DELETE" && url.pathname.startsWith("/api/segments/")) {
-    cdp.run("DELETE FROM segments WHERE id=?", url.pathname.slice(14));
+    const id = url.pathname.slice(14);
+    if (cdp.get("SELECT id FROM connections WHERE segment_id=?", id))
+      throw new Error(
+        "Remove this audience from its Connections before deleting it",
+      );
+    cdp.run("DELETE FROM segments WHERE id=?", id);
     return send(res, { ok: true });
   }
   return false;
