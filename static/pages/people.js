@@ -7,6 +7,7 @@ import {
   heading,
   loadSegmentIds,
   personCell,
+  toast,
 } from "../shared.js";
 
 export function filtered() {
@@ -19,12 +20,6 @@ export function filtered() {
           .includes(state.search.toLowerCase()),
       ),
   );
-  if (state.filter === "known") list = list.filter((p) => p.email);
-  if (state.filter === "anonymous") list = list.filter((p) => !p.email);
-  if (state.filter === "subscribers")
-    list = list.filter((p) => p.traits["subscribers/status"] === "active");
-  if (state.filter === "app")
-    list = list.filter((p) => p.traits["app/created_at"]);
   const segment = state.data.segments.find((s) => s.id === state.segment);
   if (segment) list = list.filter((p) => state.segmentIds?.has(p.id));
   return list;
@@ -43,20 +38,7 @@ export function people() {
       `${num(list.length)} profiles · Understand every person in your audience.`,
       `<div><button class="button" data-action="export">↓ Export CSV${state.selected.size ? ` (${state.selected.size})` : ""}</button> <button class="button primary" data-action="segment">＋ Create segment</button></div>`,
     ) +
-    `<section class="panel"><div class="tabs">${[
-      ["all", "All people"],
-      ["known", "Identified"],
-      ["anonymous", "Anonymous"],
-      ["subscribers", "Subscribers"],
-      ["app", "App users"],
-    ]
-      .map(
-        ([k, label]) =>
-          `<button class="${state.filter === k ? "active" : ""}" data-filter="${k}">${label}</button>`,
-      )
-      .join(
-        "",
-      )}</div><div class="toolbar"><div class="search"><input id="people-search" placeholder="Search by email, name, or identity…" value="${esc(state.search)}" aria-label="Search people"></div><select id="segment-filter" aria-label="Filter by segment"><option value="">All segments</option>${state.data.segments.map((s) => `<option value="${s.id}" ${state.segment === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>${chosen ? `<button class="button small" data-edit-segment="${chosen.id}">Edit conditions</button>` : ""}</div><div class="table-scroll"><table><thead><tr><th><input type="checkbox" id="select-page" aria-label="Select page" ${rows.length && rows.every((p) => state.selected.has(p.id)) ? "checked" : ""}></th><th>PERSON</th><th>STATUS</th><th>SOURCES</th><th>EVENTS</th><th>LAST SEEN</th></tr></thead><tbody>${
+    `<section class="panel"><div class="toolbar"><div class="search"><input id="people-search" placeholder="Search by email, name, or identity…" value="${esc(state.search)}" aria-label="Search people"></div><select id="segment-filter" aria-label="Filter by segment"><option value="">All segments</option>${state.data.segments.map((s) => `<option value="${s.id}" ${state.segment === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}</select>${chosen ? `<button class="button small" data-edit-segment="${chosen.id}">Edit conditions</button>` : ""}</div><div class="table-scroll"><table><thead><tr><th><input type="checkbox" id="select-page" aria-label="Select page" ${rows.length && rows.every((p) => state.selected.has(p.id)) ? "checked" : ""}></th><th>PERSON</th><th>STATUS</th><th>SOURCES</th><th>EVENTS</th><th>LAST SEEN</th></tr></thead><tbody>${
       rows
         .map((p) => {
           const sources = [
@@ -81,10 +63,21 @@ export function people() {
     $("#people-search").setSelectionRange(pos, pos);
   });
   $("#segment-filter").addEventListener("change", async (e) => {
-    state.segment = e.target.value;
+    const segmentId = e.target.value;
+    state.segment = segmentId;
+    state.segmentIds = null;
     state.page = 1;
-    await loadSegmentIds();
-    people();
+    state.selected.clear();
+    try {
+      await loadSegmentIds();
+      if (state.segment === segmentId && state.view === "people") people();
+    } catch (error) {
+      if (state.segment !== segmentId) return;
+      state.segment = "";
+      state.segmentIds = null;
+      if (state.view === "people") people();
+      toast(`Could not load segment: ${error.message}`);
+    }
   });
   $("#select-page").addEventListener("change", (e) => {
     rows.forEach((p) =>

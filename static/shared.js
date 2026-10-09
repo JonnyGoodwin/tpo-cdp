@@ -37,7 +37,6 @@ export const state = {
   data: null,
   view: "overview",
   search: "",
-  filter: "all",
   segment: "",
   page: 1,
   selected: new Set(),
@@ -83,11 +82,15 @@ export function go(view) {
 export const heading = (title, sub, actions = "") =>
   `<div class="page-head"><div><h1>${title}</h1><div class="subtitle">${sub}</div></div>${actions}</div>`;
 export async function loadSegmentIds() {
-  const s = state.data.segments.find((s) => s.id === state.segment);
-  if (s)
-    state.segmentIds = new Set(
-      (await api("/api/segments/preview", s.definition)).ids,
-    );
+  const segmentId = state.segment;
+  const s = state.data.segments.find((s) => s.id === segmentId);
+  if (!s) {
+    state.segmentIds = null;
+    return;
+  }
+  const { ids } = await api("/api/segments/preview", s.definition);
+  // A slower response from an earlier selection must not replace the current audience.
+  if (state.segment === segmentId) state.segmentIds = new Set(ids);
 }
 
 let renderPage;

@@ -76,6 +76,44 @@ try {
     .waitFor();
   await page.goForward();
   await page.getByRole("heading", { name: "People", exact: true }).waitFor();
+  const workspace = await (await page.request.get(base + "/api/state")).json();
+  for (const segment of workspace.segments) {
+    const membership = await page.request.post(base + "/api/segments/preview", {
+      data: segment.definition,
+    });
+    const ids = new Set((await membership.json()).ids);
+    await page.getByLabel("Filter by segment").selectOption(segment.id);
+    await page
+      .getByRole("heading", { name: segment.name, exact: true })
+      .waitFor();
+    assert.equal(
+      await page.getByLabel("Filter by segment").inputValue(),
+      segment.id,
+    );
+    assert.equal(
+      await page.locator("tbody tr[data-profile]").count(),
+      Math.min(ids.size, 25),
+    );
+    const visibleIds = await page
+      .locator("tbody tr[data-profile]")
+      .evaluateAll((rows) => rows.map((row) => row.dataset.profile));
+    assert.ok(
+      visibleIds.every((id) => ids.has(id)),
+      "Table contains only segment members",
+    );
+    assert.ok(
+      (await page.locator(".pagination").innerText()).includes(
+        `of ${ids.size.toLocaleString()} people`,
+      ),
+    );
+  }
+  await page.getByLabel("Filter by segment").selectOption("");
+  await page.getByRole("heading", { name: "People", exact: true }).waitFor();
+  assert.ok(
+    (await page.locator(".pagination").innerText()).includes(
+      `of ${workspace.stats.people.toLocaleString()} people`,
+    ),
+  );
   await page
     .getByPlaceholder("Search by email, name, or identity…")
     .fill("julia.peterson914");

@@ -184,7 +184,6 @@ export function importView() {
     $("#import-done").onclick = () => {
       close();
       state.segment = "";
-      state.filter = "all";
       state.search = "";
       go("people");
     };

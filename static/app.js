@@ -98,13 +98,6 @@ document.addEventListener("click", async (e) => {
     }
     return;
   }
-  if (button?.dataset.filter) {
-    state.filter = button.dataset.filter;
-    state.page = 1;
-    state.selected.clear();
-    people();
-    return;
-  }
   const edit = e.target.closest("[data-edit-segment]");
   if (edit) {
     openBuilder(edit.dataset.editSegment);
@@ -113,7 +106,6 @@ document.addEventListener("click", async (e) => {
   const segment = e.target.closest("[data-show-segment]");
   if (segment) {
     state.segment = segment.dataset.showSegment;
-    state.filter = "all";
     state.search = "";
     await loadSegmentIds();
     go("people");
