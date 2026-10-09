@@ -1,4 +1,5 @@
 import { connections } from "./pages/connections.js";
+import { confirmDeletePeople } from "./dialogs/delete-people.js";
 import { pushPeople } from "./dialogs/connections.js";
 import {
   $,
@@ -70,6 +71,7 @@ document.addEventListener("click", async (e) => {
     if (action === "close") close();
     if (action === "import") openImport();
     if (action === "segment") openBuilder();
+    if (action === "delete-people") confirmDeletePeople([...state.selected]);
     if (action === "prev-page") {
       state.page--;
       people();

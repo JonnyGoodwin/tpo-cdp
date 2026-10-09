@@ -17,11 +17,13 @@ Open **http://localhost:8787**. Set `PORT` to change the port. The server binds 
 Each page has its own URL: Overview (`/`), People (`/people`), Segments (`/segments`), Sources & imports (`/sources`), Attributes (`/attributes`), and Connections (`/connections`). Pages support direct links, refresh, and browser back/forward navigation.
 
 - **Overview:** audience totals, source summaries, and recently active people.
-- **People:** search emails and identities, filter by segment, inspect attributes and linked identities, browse event timelines, select profiles, and export filtered or selected people to CSV, push them to a Connection.
+- **People:** search emails and identities, filter by segment, inspect attributes and linked identities, browse event timelines, select profiles, and export filtered or selected people to CSV, push them to a Connection, and delete individual or selected people after confirmation.
 - **Segments:** live audiences using all/any conditions, nested groups, attribute comparisons, dates, event counts, and event name/property matches. Preview membership before saving; edit and delete saved segments.
 - **Sources & imports:** upload CSV → choose a source and row type → map columns → validate → review projected changes → import. Click past imports to see saved mappings and rejected record numbers.
 - **Attributes:** inspect source namespaces, inferred display types, examples, and population counts.
 - **Connections:** write functions, select audiences, enable automatic entry triggers, manually push people, and inspect run history.
+
+Deleting a person removes their profile, identities, events, audience memberships, and Connection history, and cancels queued or active function calls. Bulk deletion is atomic. Original source CSVs and copies already sent to external services are unchanged; importing their data again can recreate the profile.
 
 ## Connections
 

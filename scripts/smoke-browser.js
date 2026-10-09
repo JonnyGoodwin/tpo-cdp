@@ -303,6 +303,52 @@ try {
   );
   await page.request.delete(`${base}/api/connections/${connection.id}`);
   await page.request.delete(`${base}/api/segments/${connectionAudience.id}`);
+  await page.locator("tbody tr[data-profile]").click();
+  await page
+    .getByRole("button", { name: "Delete person", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  assert.equal(await page.locator("tbody tr[data-profile]").count(), 1);
+  await page.locator("tbody tr[data-profile]").click();
+  await page
+    .getByRole("button", { name: "Delete person", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Delete person", exact: true })
+    .click();
+  await page
+    .getByText("No profiles match these filters.", { exact: true })
+    .waitFor();
+  await page.request.post(base + "/api/import", {
+    data: {
+      source: "deletion_qa",
+      text: "email\ndelete-qa-1@example.com\ndelete-qa-2@example.com",
+    },
+  });
+  await page.reload();
+  await page
+    .getByPlaceholder("Search by email, name, or identity…")
+    .fill("delete-qa-");
+  await page.getByLabel("Select page", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Delete selected (2)", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Delete 2 people", exact: true })
+    .click();
+  await page
+    .getByText("No profiles match these filters.", { exact: true })
+    .waitFor();
+  const afterDeletion = await (
+    await page.request.get(base + "/api/state")
+  ).json();
+  assert.ok(
+    afterDeletion.profiles.every(
+      (p) =>
+        !p.email?.includes("delete-qa-") &&
+        p.email !== "connection-qa@example.com",
+    ),
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#nav [data-view="overview"]').click();
   await page

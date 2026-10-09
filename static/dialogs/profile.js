@@ -10,6 +10,7 @@ import {
   modal,
   close,
 } from "../shared.js";
+import { confirmDeletePeople } from "./delete-people.js";
 
 export async function profile(id) {
   try {
@@ -32,6 +33,12 @@ export async function profile(id) {
           .join("") || '<p class="hint">No tracked events for this person.</p>'
       }${p.events.length > 200 ? '<p class="hint">Showing the latest 200 events.</p>' : ""}</div></section></div>`;
     $("#overlay .close").focus();
+    const section = document.createElement("div");
+    section.className = "profile-section";
+    section.innerHTML =
+      '<button class="button danger" id="delete-person">Delete person</button>';
+    $("#overlay .drawer").append(section);
+    $("#delete-person").onclick = () => confirmDeletePeople([id]);
   } catch (e) {
     toast(e.message);
   }

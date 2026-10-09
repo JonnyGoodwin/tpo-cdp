@@ -1,5 +1,15 @@
-import { send } from "../http.js";
+import { send, body } from "../http.js";
+import { deletePeople } from "../../cdp/delete-people.js";
 export async function handle(req, res, url, cdp) {
+  if (req.method === "DELETE" && url.pathname === "/api/people") {
+    return send(res, deletePeople(cdp, (await body(req)).ids));
+  }
+  if (req.method === "DELETE" && url.pathname.startsWith("/api/people/")) {
+    return send(
+      res,
+      deletePeople(cdp, [decodeURIComponent(url.pathname.slice(12))]),
+    );
+  }
   if (req.method === "GET" && url.pathname.startsWith("/api/people/")) {
     const id = decodeURIComponent(url.pathname.slice(12));
     const person = cdp.profiles().find((p) => p.id === id);
