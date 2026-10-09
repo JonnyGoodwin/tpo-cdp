@@ -130,13 +130,41 @@ try {
     .getByRole("button", { name: "Create segment", exact: false })
     .click();
   await page.getByLabel("Segment name").fill("Browser QA temporary");
+  await page.locator('[data-rule-field="0"]').selectOption("last_seen");
+  assert.equal(
+    await page.locator('[data-rule-value="0"]').getAttribute("type"),
+    "date",
+  );
+  await page.locator('[data-rule-field="0"]').selectOption("email");
+  assert.equal(
+    await page.locator('[data-rule-value="0"]').getAttribute("type"),
+    "text",
+  );
+  await page.locator('[data-rule-op="0"]').selectOption("before");
+  assert.equal(
+    await page.locator('[data-rule-value="0"]').getAttribute("type"),
+    "date",
+  );
+  await page.locator('[data-rule-field="0"]').selectOption("app/created_at");
+  await page.locator('[data-rule-value="0"]').fill("2026-11-01");
   await page.getByRole("button", { name: "Add group", exact: false }).click();
+  await page.locator('[data-rule-field="1.0"]').selectOption("last_seen");
+  await page.locator('[data-rule-op="1.0"]').selectOption("after");
+  await page.locator('[data-rule-value="1.0"]').fill("2026-01-01");
   await page.getByRole("button", { name: "Save segment", exact: true }).click();
   await page.getByRole("heading", { name: "Segments", exact: true }).waitFor();
   const segment = page
     .locator(".segment-card")
     .filter({ hasText: "Browser QA temporary" });
   await segment.getByRole("button", { name: "Edit" }).click();
+  assert.equal(
+    await page.locator('[data-rule-value="0"]').inputValue(),
+    "2026-11-01",
+  );
+  assert.equal(
+    await page.locator('[data-rule-value="1.0"]').inputValue(),
+    "2026-01-01",
+  );
   await page
     .getByRole("button", { name: "Delete segment", exact: true })
     .click();

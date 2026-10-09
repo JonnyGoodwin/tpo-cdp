@@ -11,15 +11,26 @@ export function matches(cdp, p, definition) {
             ? p.last_seen
             : p.traits[r.field];
     const want = r.value;
+    // Date pickers select a calendar day, while imported date traits contain timestamps.
+    const comparable =
+      typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}T/.test(value) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(want))
+        ? value.slice(0, 10)
+        : value;
     switch (r.op) {
       case "known":
         return value != null && value !== "";
       case "unknown":
         return value == null || value === "";
       case "eq":
-        return String(value ?? "").toLowerCase() === String(want).toLowerCase();
+        return (
+          String(comparable ?? "").toLowerCase() === String(want).toLowerCase()
+        );
       case "neq":
-        return String(value ?? "").toLowerCase() !== String(want).toLowerCase();
+        return (
+          String(comparable ?? "").toLowerCase() !== String(want).toLowerCase()
+        );
       case "contains":
         return String(value ?? "")
           .toLowerCase()

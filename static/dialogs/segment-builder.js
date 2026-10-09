@@ -14,6 +14,44 @@ import {
 
 let builder,
   builderCount = 0;
+function usesDatePicker(rule) {
+  if (["after", "before"].includes(rule.op)) return true;
+  if (rule.op === "event") return false;
+  if (rule.field === "last_seen") return true;
+  const mappedDate = state.data.imports.some((entry) =>
+    entry.mapping.some(
+      (column) =>
+        column.target === "trait" &&
+        column.type === "date" &&
+        `${entry.source}/${column.name || column.column}` === rule.field,
+    ),
+  );
+  if (mappedDate) return true;
+  return state.data.profiles.some((person) => {
+    const value = person.traits[rule.field];
+    return (
+      typeof value === "string" &&
+      /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(value) &&
+      !Number.isNaN(Date.parse(value))
+    );
+  });
+}
+function dateInputValue(value) {
+  return /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(String(value || ""))
+    ? String(value).slice(0, 10)
+    : "";
+}
+function updateValueInput(key) {
+  const rule = ruleAt(key).rule;
+  const input = [...document.querySelectorAll("[data-rule-value]")].find(
+    (element) => element.dataset.ruleValue === key,
+  );
+  const isDate = usesDatePicker(rule);
+  input.type = isDate ? "date" : "text";
+  if (isDate) rule.value = dateInputValue(rule.value);
+  input.value = rule.value || "";
+  input.disabled = ["known", "unknown"].includes(rule.op);
+}
 export function openBuilder(id) {
   const s = state.data.segments.find((s) => s.id === id);
   builder = s
@@ -51,7 +89,7 @@ export function ruleMarkup(r, k, prefix = "") {
     )
     .join(
       "",
-    )}</select><input data-rule-value="${key}" aria-label="Condition value" value="${esc(r.value)}" ${["known", "unknown"].includes(r.op) ? "disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
+    )}</select><input type="${usesDatePicker(r) ? "date" : "text"}" data-rule-value="${key}" aria-label="Condition value" value="${esc(usesDatePicker(r) ? dateInputValue(r.value) : r.value)}" ${["known", "unknown"].includes(r.op) ? "disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
 }
 export function ruleAt(key) {
   let rules = builder.definition.rules;
@@ -92,6 +130,7 @@ export function builderView() {
     (e) =>
       (e.onchange = () => {
         ruleAt(e.dataset.ruleField).rule.field = e.value;
+        updateValueInput(e.dataset.ruleField);
         previewBuilder();
       }),
   );
@@ -99,7 +138,8 @@ export function builderView() {
     (e) =>
       (e.onchange = () => {
         ruleAt(e.dataset.ruleOp).rule.op = e.value;
-        builderView();
+        updateValueInput(e.dataset.ruleOp);
+        previewBuilder();
       }),
   );
   document.querySelectorAll("[data-rule-value]").forEach(

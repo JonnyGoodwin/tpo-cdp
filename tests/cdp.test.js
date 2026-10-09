@@ -207,3 +207,19 @@ test("supplied datasets import, stitch identities, and reimport without duplicat
   });
   db.db.close();
 });
+
+test("calendar-day equality matches imported date timestamps without changing precise timestamp comparisons", () => {
+  const db = new CDP();
+  try {
+    const person = { traits: { "app/created_at": "2026-10-09T14:30:00.000Z" } };
+    const matches = (op, value) =>
+      db.matches(person, { rules: [{ field: "app/created_at", op, value }] });
+    assert.equal(matches("eq", "2026-10-09"), true);
+    assert.equal(matches("eq", "2026-10-08"), false);
+    assert.equal(matches("neq", "2026-10-09"), false);
+    assert.equal(matches("eq", "2026-10-09T14:30:00.000Z"), true);
+    assert.equal(matches("eq", "2026-10-09T15:30:00.000Z"), false);
+  } finally {
+    db.db.close();
+  }
+});
