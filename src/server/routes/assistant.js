@@ -7,6 +7,7 @@ import {
 } from "../../assistant/planner.js";
 import { runQuery } from "../../assistant/queries.js";
 import { sync } from "../../connections/store.js";
+import { chatReply } from "../../assistant/conversation.js";
 export function assistantRoutes(cdp) {
   const reports = new Map();
   return async (req, res, url) => {
@@ -16,8 +17,10 @@ export function assistantRoutes(cdp) {
         planner: process.env.OPENAI_API_KEY ? "openai" : "local",
       });
     if (req.method === "POST" && url.pathname === "/api/assistant/ask") {
-      const { question } = await body(req);
-      const planned = await planQuestion(question);
+      const { question, context } = await body(req);
+      const reply = chatReply(question);
+      if (reply) return send(res, reply);
+      const planned = await planQuestion(question, { context });
       if (planned.clarification) return send(res, planned);
       const now = new Date();
       const result = runQuery(cdp, planned.plan, now);

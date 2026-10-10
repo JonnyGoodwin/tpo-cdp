@@ -439,29 +439,34 @@ try {
   await page.getByText("webhook-qa-story", { exact: false }).first().waitFor();
   await page.keyboard.press("Escape");
   await page.goto(base + "/assistant");
-  await page.locator('[data-assistant-example="0"]').click();
-  await page.getByRole("button", { name: "Ask", exact: true }).click();
-  await page.getByRole("heading", { name: "A quick clarification" }).waitFor();
+  await page.locator('[data-chat-example="0"]').click();
+  await expect(page.locator(".assistant-answer").last()).toContainText(
+    "Exact historical cold transitions",
+  );
   await page.getByRole("button", { name: "Use this definition" }).click();
-  await expect(page.locator(".assistant-answer").first()).toContainText(
+  await expect(page.locator(".assistant-answer").last()).toContainText(
     "subscribers match",
   );
-  await page.locator('[data-assistant-example="1"]').click();
   const answerPromise = page.waitForResponse(
     (r) =>
       r.url().endsWith("/api/assistant/ask") && r.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.locator('[data-chat-example="1"]').click();
   const answer = await (await answerPromise).json();
   assert.equal(answer.planner, "local");
   assert.equal(answer.model_context, null);
   assert.equal(answer.plan.min_reads, 3);
   assert.ok(answer.rows.every((row) => !row.email && !row.name && !row.id));
-  await page.getByRole("button", { name: "Save as segment" }).first().click();
+  await expect(page.locator(".chat-user").last()).toContainText(
+    "most engaged readers",
+  );
+  await page.getByRole("button", { name: "Save as segment" }).last().click();
   await page.locator("#assistant-segment-name").fill("QA assistant readers");
   await page.locator("#assistant-save-confirm").click();
-  await page.getByRole("heading", { name: "Segments", exact: true }).waitFor();
-  await page.getByText("QA assistant readers", { exact: true }).waitFor();
+  await expect(page.locator(".assistant-answer").last()).toContainText(
+    "Saved “QA assistant readers”",
+  );
+  assert.equal(new URL(page.url()).pathname, "/assistant");
   const savedState = await (await page.request.get(base + "/api/state")).json();
   const savedAudience = savedState.segments.find(
     (s) => s.name === "QA assistant readers",
@@ -485,7 +490,70 @@ try {
   ).json();
   assert.equal(firstPages.kind, "first_pages");
   assert.equal(firstPages.report_id, null);
+  // Follow-ups retain the last approved filters without sending the transcript to AI.
+  await page.locator("#assistant-question").fill("just Instagram");
+  const followupPromise = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/assistant/ask") && r.request().method() === "POST",
+  );
+  await page.locator("#assistant-question").press("Enter");
+  const followup = await (await followupPromise).json();
+  assert.equal(followup.plan.channel, "Instagram");
+  assert.equal(followup.plan.min_reads, 3);
+  assert.equal(followup.plan.kind, "audience");
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true }),
+  ).toBeEnabled();
+  await page.locator("#assistant-question").fill("I want to upload a list");
+  await page.locator("#assistant-question").press("Enter");
+  await expect(page.locator(".assistant-answer").last()).toContainText(
+    "choose a CSV",
+  );
+  await page
+    .locator(".assistant-answer")
+    .last()
+    .getByRole("button", { name: "Upload a list" })
+    .click();
+  await page.locator("#source-name").fill("chat_upload");
+  await page.locator("#csv-file").setInputFiles({
+    name: "chat-list.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "email,name\nchat-upload@example.com,Private Chat Name",
+    ),
+  });
+  await page.locator("#import-next").click();
+  await page.locator("#import-review").click();
+  await page.locator("#import-commit").click();
+  await page
+    .getByRole("heading", { name: "Import complete", exact: true })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Return to chat", exact: true })
+    .click();
+  await expect(page.locator(".assistant-answer").last()).toContainText(
+    "Your list is imported. 1 new profiles",
+  );
+  assert.equal(new URL(page.url()).pathname, "/assistant");
+  assert.ok(
+    !(await page.locator("#assistant-results").textContent()).includes(
+      "Private Chat Name",
+    ),
+  );
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  assert.equal(await page.locator(".chat-user").count(), 0);
+  await page.locator("#assistant-question").fill("just Instagram");
+  await page.locator("#assistant-question").press("Enter");
+  await expect(page.locator(".assistant-answer").last()).toContainText(
+    "rephrase",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
   await page.locator('#nav [data-view="overview"]').click();
   await page
     .getByRole("heading", { name: "Your audience, connected." })

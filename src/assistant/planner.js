@@ -41,7 +41,7 @@ export const planSchema = {
     limit: { type: "integer", minimum: 1, maximum: 200 },
   },
 };
-export function interpret(question) {
+export function interpret(question, context) {
   if (
     typeof question !== "string" ||
     !question.trim() ||
@@ -51,6 +51,67 @@ export function interpret(question) {
       clarification: "Ask a Growth question in up to 1,000 characters.",
     };
   const text = question.toLowerCase().replace(/[’']/g, "");
+  if (context) {
+    validatePlan(context);
+    const followup = text.trim().replace(/[?.!]+$/, "");
+    const channel = followup.match(
+      /^(?:what about|how about|only|just|same for|filter to|from) (all(?: channels| subscribers)?|instagram|google|facebook|twitter|referral|direct|email|youtube|organic)$/,
+    );
+    const period = followup.match(
+      /^(?:what about |how about |same for |for |use )?(last month|this month|the past \d{1,3} days|past \d{1,3} days|last \d{1,3} days)$/,
+    );
+    const top = followup.match(
+      /^(?:show |show me |just |only )?(?:the )?top (\d{1,3})(?: readers| rows)?$/,
+    );
+    const minimum = followup.match(
+      /^(?:with |use |make it )?at least (\d{1,3}) (?:reads|stories)$/,
+    );
+    let next;
+    if (channel)
+      next = {
+        ...context,
+        channel: channels.find((c) => c.toLowerCase() === channel[1]) || "all",
+      };
+    else if (period)
+      next = {
+        ...context,
+        period:
+          period[1] === "last month"
+            ? "last_month"
+            : period[1] === "this month"
+              ? "this_month"
+              : "last_30_days",
+        ...(period[1].match(/\d+/)
+          ? { window_days: Number(period[1].match(/\d+/)[0]) }
+          : {}),
+      };
+    else if (top) next = { ...context, limit: Number(top[1]) };
+    else if (minimum) next = { ...context, min_reads: Number(minimum[1]) };
+    else if (
+      /^(?:show (?:me )?(?:them|that|this|it) as (?:a )?list|build (?:me )?(?:a )?list|show (?:the )?(?:readers|audience))$/.test(
+        followup,
+      ) &&
+      context.kind !== "first_pages"
+    )
+      next = { ...context, kind: "audience" };
+    else if (
+      /^(?:how many(?: is that)?|count them|show (?:the )?count)$/.test(
+        followup,
+      ) &&
+      context.kind !== "first_pages"
+    )
+      next = { ...context, kind: "count" };
+    if (next) {
+      try {
+        return { intent: validatePlan(next) };
+      } catch {
+        return {
+          clarification:
+            "Use 1–365 days, up to 1,000 reads, and at most 200 rows.",
+        };
+      }
+    }
+  }
   if (/@|https?:|\b(?:u_|d_|v_)[a-z0-9]+|\d{6,}/i.test(text))
     return {
       clarification:
@@ -200,9 +261,10 @@ export async function planQuestion(
     apiKey = process.env.OPENAI_API_KEY,
     model = process.env.OPENAI_MODEL || "gpt-5-mini",
     fetchImpl = fetch,
+    context,
   } = {},
 ) {
-  const interpreted = interpret(question);
+  const interpreted = interpret(question, context);
   if (interpreted.clarification) return interpreted;
   const expected = interpreted.intent;
   if (!apiKey) return { plan: expected, planner: "local" };

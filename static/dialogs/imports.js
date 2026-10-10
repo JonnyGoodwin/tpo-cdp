@@ -12,7 +12,7 @@ import {
 } from "../shared.js";
 
 let importState;
-export function openImport() {
+export function openImport({ onComplete } = {}) {
   importState = {
     step: 1,
     text: "",
@@ -22,6 +22,7 @@ export function openImport() {
     mapping: [],
     preview: null,
     result: null,
+    onComplete,
   };
   importView();
 }
@@ -74,7 +75,7 @@ export function importView() {
   }
   if (i.step === 4) {
     content = `<div class="modal-body"><div class="success"><div class="success-icon">✓</div><h2>Import complete</h2><p class="hint">${esc(i.filename)} is now part of your customer data.</p></div>${resultGrid(i.result)}${errorTable(i.result.errors)}${i.result.errors.length ? '<button class="button small" id="download-errors">↓ Download rejected rows</button>' : ""}</div>`;
-    footer = `<span class="hint">Mapping saved in import history</span><button class="button primary" id="import-done">View people →</button>`;
+    footer = `<span class="hint">Mapping saved in import history</span><button class="button primary" id="import-done">${i.onComplete ? "Return to chat" : "View people →"}</button>`;
   }
   modal("Import customer data", steps + content, footer, true);
   if (i.step === 1) {
@@ -183,6 +184,12 @@ export function importView() {
   if (i.step === 4) {
     $("#import-done").onclick = () => {
       close();
+      if (i.onComplete) {
+        const callback = i.onComplete;
+        i.onComplete = null;
+        callback(i.result);
+        return;
+      }
       state.segment = "";
       state.search = "";
       go("people");

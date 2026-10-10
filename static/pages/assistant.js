@@ -1,6 +1,5 @@
 import {
   $,
-  esc,
   num,
   api,
   modal,
@@ -9,38 +8,102 @@ import {
   go,
   heading,
   state,
+  esc,
 } from "../shared.js";
-let previousResults = [];
+import { openImport } from "../dialogs/imports.js";
+import { examples, messageMarkup } from "./assistant-chat.js";
+const welcome = () => ({
+  role: "assistant",
+  text: "Hi! What are you working on today? I can help you understand your audience, build a segment, or upload a new list. Ask a question below to get started.",
+  actions: ["upload"],
+});
+let messages = [welcome()];
 let draft = "";
-const examples = [
-  "How many Instagram signups went cold last month?",
-  "Build me a list of our most engaged readers",
-  "Which pages do new subscribers hit first?",
-];
-function resultMarkup(result, index) {
-  if (result.clarification)
-    return `<section class="panel assistant-answer"><h2>A quick clarification</h2><p>${esc(result.clarification)}</p>${result.suggestion ? `<button class="button" data-assistant-suggestion="${index}">Use this definition</button>` : ""}</section>`;
-  return `<section class="panel assistant-answer"><div class="panel-head"><h2>${esc(result.summary)}</h2>${result.report_id ? `<button class="button primary" data-assistant-save="${index}">Save as segment</button>` : ""}</div><div class="panel-body"><p class="hint">As of ${esc(new Date(result.as_of).toLocaleString())} · ${result.planner === "openai" ? "AI plan, local calculation" : "Local plan and calculation"}</p>${result.rows.length ? `<div class="table-scroll"><table><thead><tr>${result.columns.map((column) => `<th>${esc(column.replaceAll("_", " "))}</th>`).join("")}</tr></thead><tbody>${result.rows.map((row) => `<tr>${result.columns.map((column) => `<td>${esc(typeof row[column] === "number" ? num(row[column]) : row[column])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}<details open><summary>How this was calculated</summary><ul>${result.assumptions.map((assumption) => `<li>${esc(assumption)}</li>`).join("")}</ul></details><details><summary>What the AI received</summary><p>No customer records, results, names, emails, IDs, or page URLs are sent to the model.</p><pre>${esc(result.model_context || "Nothing. This query was planned locally.")}</pre></details></div></section>`;
+let context;
+let busy = false;
+function addMessage(message) {
+  messages.push(message);
+  messages = messages.slice(-60);
+  renderMessages();
+}
+function renderMessages() {
+  if (state.view !== "assistant" || !$("#assistant-results")) return;
+  const log = $("#assistant-results");
+  log.innerHTML =
+    messages.map(messageMarkup).join("") +
+    (busy
+      ? '<div class="chat-message chat-assistant chat-pending" role="status">Working on that…</div>'
+      : "");
+  bindActions();
+  log.scrollTop = log.scrollHeight;
+}
+function setBusy(value) {
+  busy = value;
+  if (state.view !== "assistant") return;
+  $("#ask-assistant").disabled = value;
+  $("#ask-assistant").textContent = value ? "Working…" : "Send";
+  document
+    .querySelectorAll(
+      "[data-chat-example], [data-chat-suggestion], [data-chat-upload], [data-chat-followup], #assistant-new-chat",
+    )
+    .forEach((button) => (button.disabled = value));
+}
+async function sendMessage(question) {
+  if (busy || !question.trim()) return;
+  draft = "";
+  if ($("#assistant-question")) $("#assistant-question").value = "";
+  busy = true;
+  addMessage({ role: "user", text: question });
+  setBusy(true);
+  try {
+    const result = await api("/api/assistant/ask", {
+      question,
+      ...(context ? { context } : {}),
+    });
+    if (result.plan) context = result.plan;
+    addMessage({ role: "assistant", result });
+  } catch (error) {
+    addMessage({ role: "assistant", text: error.message });
+  } finally {
+    setBusy(false);
+    renderMessages();
+    if (state.view === "assistant") $("#assistant-question")?.focus();
+  }
 }
 export function assistant() {
   $("#main").innerHTML =
     heading(
       "Growth assistant",
-      "Ask a question. Get a count, a table, or an audience you can save.",
+      "Explore your audience together, one question at a time.",
+      '<button class="button" id="assistant-new-chat">New chat</button>',
     ) +
-    `<div class="notice">Customer data stays local. AI can only receive approved query concepts—not profiles or your raw question.</div><div class="assistant-examples">${examples.map((example, index) => `<button class="card" data-assistant-example="${index}">${esc(example)}</button>`).join("")}</div><section class="panel assistant-compose"><form id="assistant-form"><label for="assistant-question">What would you like to know?</label><textarea id="assistant-question" rows="3" maxlength="1000" placeholder="Ask about your signups, readers, or first visits…">${esc(draft)}</textarea><div class="assistant-compose-footer"><span class="hint" id="assistant-mode">Checking planner…</span><button class="button primary" id="ask-assistant" type="submit">Ask</button></div></form><div id="assistant-error"></div></section><div id="assistant-results">${previousResults.map(resultMarkup).join("")}</div>`;
-  $("#assistant-question").oninput = (e) => {
-    draft = e.target.value;
+    `<section class="panel assistant-chat"><div class="chat-intro"><span>Conversation</span><span class="hint">Your customer data stays local</span></div><div id="assistant-results" class="chat-thread" role="log" aria-label="Growth assistant conversation" aria-live="polite" aria-relevant="additions"></div><div class="chat-starters">${examples.map((example, index) => `<button class="button small" data-chat-example="${index}">${esc(example)}</button>`).join("")}</div><form id="assistant-form" class="assistant-compose"><label for="assistant-question">Message Growth assistant</label><textarea id="assistant-question" rows="2" maxlength="1000" placeholder="Ask a question or follow up on the last answer…">${esc(draft)}</textarea><div class="assistant-compose-footer"><button class="button small" type="button" data-chat-upload>Upload a list</button><span class="hint">Enter to send · Shift+Enter for a new line</span><button class="button primary" id="ask-assistant" type="submit">Send</button></div><details class="chat-privacy"><summary>Privacy & planning</summary><p>Raw questions, conversation history, and uploaded lists stay local. AI receives only approved query concepts.</p><span id="assistant-mode">Checking planner…</span></details></form></section>`;
+  $("#assistant-question").oninput = (e) => (draft = e.target.value);
+  $("#assistant-question").onkeydown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      $("#assistant-form").requestSubmit();
+    }
   };
-  document.querySelectorAll("[data-assistant-example]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        $("#assistant-question").value =
-          examples[Number(button.dataset.assistantExample)];
-        draft = $("#assistant-question").value;
-        $("#assistant-question").focus();
-      }),
-  );
+  $("#assistant-form").onsubmit = (e) => {
+    e.preventDefault();
+    sendMessage($("#assistant-question").value);
+  };
+  $("#assistant-new-chat").onclick = () => {
+    if (busy) return;
+    messages = [welcome()];
+    context = undefined;
+    draft = "";
+    assistant();
+    $("#assistant-question").focus();
+  };
+  document
+    .querySelectorAll("[data-chat-example]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          sendMessage(examples[Number(button.dataset.chatExample)])),
+    );
   api("/api/assistant/status")
     .then((status) => {
       if (state.view === "assistant" && $("#assistant-mode"))
@@ -52,73 +115,94 @@ export function assistant() {
       if ($("#assistant-mode"))
         $("#assistant-mode").textContent = "Planner status unavailable";
     });
-  $("#assistant-form").onsubmit = async (e) => {
-    e.preventDefault();
-    const button = $("#ask-assistant");
-    button.disabled = true;
-    button.textContent = "Working…";
-    $("#assistant-error").textContent = "";
-    try {
-      const result = await api("/api/assistant/ask", {
-        question: $("#assistant-question").value,
+  renderMessages();
+  setBusy(busy);
+}
+function uploadList() {
+  if (busy) return;
+  openImport({
+    onComplete: (result) => {
+      addMessage({
+        role: "assistant",
+        text: `Your list is imported. ${num(result.created)} new profiles, ${num(result.updated)} matched rows, and ${num(result.events)} new events. ${result.rejected ? `${num(result.rejected)} rows were skipped; you can review them in import history.` : "All rows passed validation."} What would you like to explore next?`,
+        people: true,
       });
-      previousResults.unshift(result);
-      previousResults = previousResults.slice(0, 10);
-      if (state.view === "assistant") {
-        $("#assistant-results").innerHTML = previousResults
-          .map(resultMarkup)
-          .join("");
-        bindResultActions();
-      }
+      if (state.view === "assistant") $("#assistant-question")?.focus();
+    },
+  });
+}
+function bindActions() {
+  document
+    .querySelectorAll("[data-chat-upload]")
+    .forEach((button) => (button.onclick = uploadList));
+  document.querySelectorAll("[data-chat-people]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        state.segment = "";
+        state.search = "";
+        go("people");
+      }),
+  );
+  document
+    .querySelectorAll("[data-chat-segment]")
+    .forEach((button) => (button.onclick = () => go("segments")));
+  document
+    .querySelectorAll("[data-chat-suggestion]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          sendMessage(
+            messages[Number(button.dataset.chatSuggestion)].result.suggestion,
+          )),
+    );
+  document.querySelectorAll("[data-chat-followup]").forEach(
+    (button) =>
+      (button.onclick = () => {
+        if (busy) return;
+        context = messages[Number(button.dataset.chatFollowup)].result.plan;
+        addMessage({
+          role: "assistant",
+          text: `Let's refine that result: ${context.channel === "all" ? "all channels" : context.channel}, ${context.period.replaceAll("_", " ")}${context.min_reads ? `, at least ${context.min_reads} reads` : ""}${context.cold_days ? `, cold for ${context.cold_days} days` : ""}. What would you like to change?`,
+        });
+        $("#assistant-question").focus();
+      }),
+  );
+  document
+    .querySelectorAll("[data-chat-save]")
+    .forEach(
+      (button) =>
+        (button.onclick = () =>
+          saveSegment(messages[Number(button.dataset.chatSave)].result)),
+    );
+}
+function saveSegment(result) {
+  modal(
+    "Save audience as a segment",
+    `<div class="modal-body"><p>${num(result.count)} subscribers matched this preview. The segment will update as your data changes.</p><div class="field"><label for="assistant-segment-name">Segment name</label><input id="assistant-segment-name" placeholder="e.g. Engaged readers"></div><div id="assistant-save-error"></div></div>`,
+    '<button class="button" data-action="close">Cancel</button><button class="button primary" id="assistant-save-confirm">Save segment</button>',
+  );
+  $("#assistant-save-confirm").onclick = async () => {
+    const saveButton = $("#assistant-save-confirm");
+    saveButton.disabled = true;
+    const name = $("#assistant-segment-name").value;
+    try {
+      const saved = await api("/api/assistant/segments", {
+        report_id: result.report_id,
+        name,
+      });
+      result.report_id = null;
+      close();
+      addMessage({
+        role: "assistant",
+        text: `Saved “${name.trim()}” as a live segment. You can use it in People or attach a Connection.`,
+        segmentId: saved.id,
+      });
+      await refresh();
     } catch (error) {
-      if ($("#assistant-error"))
-        $("#assistant-error").textContent = error.message;
-    } finally {
-      if ($("#ask-assistant")) {
-        $("#ask-assistant").disabled = false;
-        $("#ask-assistant").textContent = "Ask";
+      if ($("#assistant-save-error")) {
+        $("#assistant-save-error").textContent = error.message;
+        saveButton.disabled = false;
       }
     }
   };
-  bindResultActions();
-}
-function bindResultActions() {
-  document.querySelectorAll("[data-assistant-suggestion]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        const result =
-          previousResults[Number(button.dataset.assistantSuggestion)];
-        draft = result.suggestion;
-        $("#assistant-question").value = draft;
-        $("#assistant-form").requestSubmit();
-      }),
-  );
-  document.querySelectorAll("[data-assistant-save]").forEach(
-    (button) =>
-      (button.onclick = () => {
-        const result = previousResults[Number(button.dataset.assistantSave)];
-        modal(
-          "Save audience as a segment",
-          `<div class="modal-body"><p>${num(result.count)} subscribers matched this preview. The saved segment will update as your data changes.</p><div class="field"><label for="assistant-segment-name">Segment name</label><input id="assistant-segment-name" placeholder="e.g. Engaged readers"></div><div id="assistant-save-error"></div></div>`,
-          `<button class="button" data-action="close">Cancel</button><button class="button primary" id="assistant-save-confirm">Save segment</button>`,
-        );
-        $("#assistant-save-confirm").onclick = async () => {
-          const saveButton = $("#assistant-save-confirm");
-          saveButton.disabled = true;
-          try {
-            await api("/api/assistant/segments", {
-              report_id: result.report_id,
-              name: $("#assistant-segment-name").value,
-            });
-            result.report_id = null;
-            close();
-            await refresh();
-            go("segments");
-          } catch (error) {
-            $("#assistant-save-error").textContent = error.message;
-            saveButton.disabled = false;
-          }
-        };
-      }),
-  );
 }

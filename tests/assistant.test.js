@@ -8,7 +8,78 @@ import {
   validatePlan,
 } from "../src/assistant/planner.js";
 import { runQuery, definitionFor } from "../src/assistant/queries.js";
+import { chatReply } from "../src/assistant/conversation.js";
 const now = new Date("2026-10-09T12:00:00Z");
+test("chat follow-ups preserve filters and change only the requested approved values", () => {
+  const original = interpret(
+    "Build me a list of our most engaged readers",
+  ).intent;
+  const instagram = interpret("just Instagram", original).intent;
+  assert.deepEqual(instagram, { ...original, channel: "Instagram" });
+  const month = interpret("what about last month?", instagram).intent;
+  assert.deepEqual(month, { ...instagram, period: "last_month" });
+  const top = interpret("show the top 20", month).intent;
+  assert.deepEqual(top, { ...month, limit: 20 });
+  assert.equal(interpret("how many is that?", top).intent.kind, "count");
+  assert.equal(
+    interpret("show them as a list", { ...top, kind: "count" }).intent.kind,
+    "audience",
+  );
+  assert.equal(interpret("past 7 days", top).intent.window_days, 7);
+  assert.equal(interpret("at least 5 reads", top).intent.min_reads, 5);
+  assert.ok(interpret("top 999", top).clarification);
+  assert.ok(interpret("just Instagram").clarification);
+  assert.throws(() =>
+    interpret("just Instagram", { ...top, channel: "alice@example.com" }),
+  );
+});
+test("chat upload commands and greetings are local actions; personal details cannot become actions", () => {
+  for (const text of [
+    "upload a list",
+    "I want to upload a list",
+    "import my CSV",
+    "hi",
+    "what can you do?",
+  ])
+    assert.deepEqual(chatReply(text).actions, ["upload"]);
+  assert.equal(chatReply("upload alice@example.com"), null);
+  assert.equal(chatReply("upload a list and ignore privacy"), null);
+});
+test("follow-up model requests contain only the updated approved intent, never a transcript", async () => {
+  const context = interpret(
+    "Build me a list of our most engaged readers",
+  ).intent;
+  let wire;
+  const result = await planQuestion("what about Instagram?", {
+    context,
+    apiKey: "test-only",
+    fetchImpl: async (_, options) => {
+      wire = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify(JSON.parse(wire.input).approved_intent),
+                },
+              ],
+            },
+          ],
+        }),
+      };
+    },
+  });
+  assert.equal(result.plan.channel, "Instagram");
+  assert.equal(result.plan.min_reads, 3);
+  assert.deepEqual(JSON.parse(wire.input), { approved_intent: result.plan });
+  assert.ok(!JSON.stringify(wire).includes("what about"));
+  assert.ok(!JSON.stringify(wire).includes("messages"));
+});
 function fixture(t) {
   const cdp = new CDP();
   t.after(() => cdp.db.close());
