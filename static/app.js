@@ -1,3 +1,4 @@
+import { assistant } from "./pages/assistant.js";
 import { connections } from "./pages/connections.js";
 import { confirmDeletePeople } from "./dialogs/delete-people.js";
 import { pushPeople } from "./dialogs/connections.js";
@@ -29,6 +30,7 @@ function render() {
     sources: "Sources & imports",
     attributes: "Attributes",
     connections: "Connections",
+    assistant: "Growth assistant",
   };
   $("#breadcrumb").innerHTML = `Workspace <b>/</b> ${names[state.view]}`;
   document
@@ -43,6 +45,7 @@ function render() {
     sources: sources,
     attributes: attributes,
     connections,
+    assistant,
   })[state.view]();
 }
 

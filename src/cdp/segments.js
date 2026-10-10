@@ -1,12 +1,15 @@
-export function matches(cdp, p, definition) {
+import { readingCount } from "../assistant/queries.js";
+export function matches(cdp, p, definition, now = new Date()) {
   const rules = definition.rules || [];
   const test = (r) => {
-    if (r.rules) return cdp.matches(p, r);
+    if (r.rules) return matches(cdp, p, r, now);
     const value =
       r.field === "email"
         ? p.email
         : r.field === "event_count"
-          ? p.event_count
+          ? r.window_days
+            ? readingCount(cdp, p.id, r, now)
+            : p.event_count
           : r.field === "last_seen"
             ? p.last_seen
             : p.traits[r.field];
@@ -39,6 +42,13 @@ export function matches(cdp, p, definition) {
         return Number(value) > Number(want);
       case "lt":
         return Number(value) < Number(want);
+      case "older_than_days":
+        return (
+          value != null &&
+          value !== "" &&
+          Number.isFinite(Number(want)) &&
+          Date.parse(value) <= now.getTime() - Number(want) * 86400000
+        );
       case "after":
         return Date.parse(value) > Date.parse(want);
       case "before":

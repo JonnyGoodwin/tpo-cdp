@@ -1,3 +1,4 @@
+import { assistantRoutes } from "./routes/assistant.js";
 import { appWebhook } from "./routes/app-webhook.js";
 import { handle as connections } from "./routes/connections.js";
 import http from "node:http";
@@ -16,9 +17,11 @@ const pages = new Set([
   "/sources",
   "/attributes",
   "/connections",
+  "/assistant",
 ]);
 export function createServer(cdp, root) {
   const webhook = appWebhook(cdp, root);
+  const assistant = assistantRoutes(cdp);
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://localhost");
@@ -35,6 +38,7 @@ export function createServer(cdp, root) {
         exportPeople,
         connections,
         webhook,
+        assistant,
       ]) {
         if ((await handle(req, res, url, cdp)) !== false) return;
       }

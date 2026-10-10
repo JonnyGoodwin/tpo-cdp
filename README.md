@@ -58,6 +58,24 @@ Event IDs deduplicate persisted webhook events. The first delivery returns HTTP 
 
 Successful calls are immediately available from `/api/state`, `/api/people/:id`, and segment previews, and update Connection audience membership. Refresh the workspace to load the latest events in the UI; no server restart is needed for event ingestion. The development server remains bound to localhost.
 
+## Growth assistant
+
+Open `/assistant` to ask for signup counts, currently cold subscribers, engaged readers, or first web pages after signup. Results include the calculation rules and the exact approved intent sent to AI, when AI is enabled. Count and audience results can be saved as live segments; first-page reports are aggregate tables. Saving uses all matching subscribers, not just the displayed top rows. Report previews expire after 30 minutes and on server restart.
+
+The assistant works immediately with a local, constrained language parser. To enable optional OpenAI planning, copy `.env.example` to `.env`, set `OPENAI_API_KEY`, and restart the server. `OPENAI_MODEL` defaults to `gpt-5-mini`. `.env` is ignored by Git and loaded by `npm run dev` / `npm start`; the browser never receives the key. This is a bounded Growth assistant rather than an unrestricted chatbot: unsupported wording, personal details, negation, and unsupported filters ask for clarification rather than silently running arbitrary queries.
+
+The privacy boundary is structural:
+
+1. Raw questions stay on your computer. An allowlist recognizes supported Growth vocabulary and converts it into seven enum/numeric fields: report kind, acquisition channel, period, reading window, inactivity threshold, minimum reads, and row limit. It rejects unfamiliar terms and personal identifiers before any model request.
+2. Only these approved values and a fixed schema are sent to OpenAI. No profiles, names, emails, user/device IDs, custom traits, URLs, raw questions, result counts, or rows are included. Responses requests use `store: false` and [strict Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses). This does not mean OpenAI's other API retention policies are disabled; the important protection is keeping identifying data out of the request entirely.
+3. The server validates every returned field and requires it to preserve the locally interpreted intent. The model cannot provide SQL, code, arbitrary field names, tools, or new filters. Invalid, incomplete, or changed plans never execute.
+4. SQLite and the existing segment engine calculate exact results locally. The UI renders those results directly; they are never sent back to the model for summarization. Reader tables use per-report `Reader 1` labels, with no persistent person identifiers. Page paths and any identifying path components remain local as well.
+5. Saving a segment requires an explicit click and a server-issued preview token. Names and segment membership stay local. Questions and report history are not persisted; recent reports live only in browser/server memory.
+
+Definitions are explicit: cold now means signup at least 30 days ago and a last newsletter open at least 30 days ago or missing. Missing opens do not prove inactivity. Historical “went cold last month” requires email-open history that this dataset does not contain, so the assistant asks whether you mean last month's signups that are cold now. Engagement defaults to at least three recorded `Page viewed` / `read_story` events in the past 30 days, ranked by read count; app opens and newsletter opens do not count. First pages use the earliest recorded web visit on or after signup, with query strings and fragments removed. Calendar months and date-only signups use UTC. New subscribers defaults to the past 30 days.
+
+Supported examples include “How many Instagram signups last month?”, “How many Instagram signups from last month are cold now?”, “Build me a list of our most engaged readers”, “List engaged readers with at least 5 reads in the past 30 days”, and “Which pages do new subscribers hit first?”. Automatic tests verify outbound payloads, blocked personal details, invalid model plans, date boundaries, counts, ranking, first-page ordering, and saved segment membership. Live OpenAI requests require your own API key.
+
 ## Import rules
 
 Files must be UTF-8 CSV with unique, nonempty headers; quoted commas, multiline fields, escaped quotes, BOMs, and CRLF are supported. The upload limit is 20 MB. Map at least one identity column (email, external ID, or visitor ID). For event imports also map a timestamp. A mapped event name is optional and defaults to `Page viewed`.
@@ -77,6 +95,7 @@ This is a local single-workspace application. It does not yet include multi-user
 - `server.js`: startup, database location, and server binding.
 - `src/cdp/`: SQLite access, CSV parsing and mapping, imports, profile queries, and segmentation.
 - `src/connections/`: durable audience membership and run queue, function workers, and execution history.
+- `src/assistant/`: approved query vocabulary, optional AI planning, and local analytics execution.
 - `src/server/`: initial data loading, HTTP helpers, and API routes grouped by feature.
 - `static/app.js`: frontend startup, page routing, and shared event handling.
 - `static/pages/`: one module per page.

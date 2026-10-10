@@ -6,8 +6,8 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js",
+    "dev": "node --env-file-if-exists=.env server.js",
+    "start": "node --env-file-if-exists=.env server.js",
     "test": "node --test",
     "test:browser": "node scripts/smoke-browser.js",
     "format": "prettier --write server.js src static scripts tests package.json README.md",

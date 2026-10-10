@@ -9,7 +9,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = mkdtempSync(join(tmpdir(), "tpo-cdp-browser-"));
 const server = spawn(process.execPath, ["server.js"], {
   cwd: root,
-  env: { ...process.env, PORT: "0", CDP_DATA_DIR: dataDir },
+  env: { ...process.env, PORT: "0", CDP_DATA_DIR: dataDir, OPENAI_API_KEY: "" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let browser;
@@ -53,6 +53,7 @@ try {
     ["/sources", "Sources & imports"],
     ["/attributes", "Attributes"],
     ["/connections", "Connections"],
+    ["/assistant", "Growth assistant"],
   ]) {
     const response = await page.goto(base + route);
     assert.equal(response.status(), 200);
@@ -437,6 +438,53 @@ try {
   await page.locator("tbody tr[data-profile]").click();
   await page.getByText("webhook-qa-story", { exact: false }).first().waitFor();
   await page.keyboard.press("Escape");
+  await page.goto(base + "/assistant");
+  await page.locator('[data-assistant-example="0"]').click();
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await page.getByRole("heading", { name: "A quick clarification" }).waitFor();
+  await page.getByRole("button", { name: "Use this definition" }).click();
+  await expect(page.locator(".assistant-answer").first()).toContainText(
+    "subscribers match",
+  );
+  await page.locator('[data-assistant-example="1"]').click();
+  const answerPromise = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/assistant/ask") && r.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const answer = await (await answerPromise).json();
+  assert.equal(answer.planner, "local");
+  assert.equal(answer.model_context, null);
+  assert.equal(answer.plan.min_reads, 3);
+  assert.ok(answer.rows.every((row) => !row.email && !row.name && !row.id));
+  await page.getByRole("button", { name: "Save as segment" }).first().click();
+  await page.locator("#assistant-segment-name").fill("QA assistant readers");
+  await page.locator("#assistant-save-confirm").click();
+  await page.getByRole("heading", { name: "Segments", exact: true }).waitFor();
+  await page.getByText("QA assistant readers", { exact: true }).waitFor();
+  const savedState = await (await page.request.get(base + "/api/state")).json();
+  const savedAudience = savedState.segments.find(
+    (s) => s.name === "QA assistant readers",
+  );
+  assert.equal(
+    savedAudience.definition.rules.find((r) => r.field === "event_count")
+      .window_days,
+    30,
+  );
+  assert.equal(savedAudience.count, answer.count);
+  const privateQuestion = await (
+    await page.request.post(base + "/api/assistant/ask", {
+      data: { question: "How many signups for alice@example.com?" },
+    })
+  ).json();
+  assert.ok(privateQuestion.clarification);
+  const firstPages = await (
+    await page.request.post(base + "/api/assistant/ask", {
+      data: { question: "Which pages do new subscribers hit first?" },
+    })
+  ).json();
+  assert.equal(firstPages.kind, "first_pages");
+  assert.equal(firstPages.report_id, null);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#nav [data-view="overview"]').click();
   await page

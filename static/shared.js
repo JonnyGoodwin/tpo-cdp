@@ -105,6 +105,7 @@ export const pageRoutes = {
   sources: "/sources",
   attributes: "/attributes",
   connections: "/connections",
+  assistant: "/assistant",
 };
 export function viewFromPath(path) {
   return (

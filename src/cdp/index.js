@@ -18,8 +18,8 @@ export class CDP extends Database {
     if (!options.dryRun) sync(this);
     return result;
   }
-  matches(profile, definition) {
-    return matches(this, profile, definition);
+  matches(profile, definition, now) {
+    return matches(this, profile, definition, now);
   }
   segments(people = this.profiles()) {
     return segments(this, people);

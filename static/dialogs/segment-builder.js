@@ -16,7 +16,7 @@ let builder,
   builderCount = 0;
 function usesDatePicker(rule) {
   if (["after", "before"].includes(rule.op)) return true;
-  if (rule.op === "event") return false;
+  if (["event", "older_than_days"].includes(rule.op)) return false;
   if (rule.field === "last_seen") return true;
   const mappedDate = state.data.imports.some((entry) =>
     entry.mapping.some(
@@ -47,7 +47,8 @@ function updateValueInput(key) {
     (element) => element.dataset.ruleValue === key,
   );
   const isDate = usesDatePicker(rule);
-  input.type = isDate ? "date" : "text";
+  input.type =
+    rule.op === "older_than_days" ? "number" : isDate ? "date" : "text";
   if (isDate) rule.value = dateInputValue(rule.value);
   input.value = rule.value || "";
   const noValue = ["known", "unknown"].includes(rule.op);
@@ -83,6 +84,7 @@ export function ruleMarkup(r, k, prefix = "") {
     ["unknown", "is unknown"],
     ["gt", "is greater than"],
     ["lt", "is less than"],
+    ["older_than_days", "is at least this many days old"],
     ["after", "is after date"],
     ["before", "is before date"],
     ["event", "has event containing"],
@@ -93,7 +95,7 @@ export function ruleMarkup(r, k, prefix = "") {
     )
     .join(
       "",
-    )}</select><input type="${usesDatePicker(r) ? "date" : "text"}" data-rule-value="${key}" aria-label="Condition value" value="${esc(usesDatePicker(r) ? dateInputValue(r.value) : r.value)}" ${noValue ? "hidden disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
+    )}</select><input type="${r.op === "older_than_days" ? "number" : usesDatePicker(r) ? "date" : "text"}" data-rule-value="${key}" aria-label="Condition value" value="${esc(usesDatePicker(r) ? dateInputValue(r.value) : r.value)}" ${noValue ? "hidden disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
 }
 export function ruleAt(key) {
   let rules = builder.definition.rules;
