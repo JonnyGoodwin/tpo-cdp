@@ -35,6 +35,29 @@ From People, use **Push audience** for the current filtered audience, or select 
 
 Set the Connection’s Source namespace to `pdl`. Returning `{ traits: { job_title: "Editor" } }` then saves attributes under `pdl/job_title`, preserving attributes from other sources. These traits can be used in segment rules. Starter templates use [Beehiiv’s create-subscription API](https://developers.beehiiv.com/api-reference/subscriptions/create) and [People Data Labs’ person-enrichment API](https://docs.peopledatalabs.com/docs/person-enrichment-api). Supply your own service credentials. Failed service responses are recorded as failed calls.
 
+## App event webhook
+
+Send `POST /webhooks/app` with a JSON body:
+
+```json
+{
+  "event_id": "evt_9f3a1c",
+  "event": "read_story",
+  "user_id": "u_2b6447a3",
+  "device_id": "d_4b21e8",
+  "timestamp": "2026-09-28T14:22:05Z",
+  "properties": { "story": "supreme-court-ruling-explained" }
+}
+```
+
+Supported events are `app_open`, `read_story`, `link_click`, and `login`. Supply a nonempty `event_id` and `device_id`, an ISO datetime with a timezone, and a properties object. `user_id` must be a string or explicitly `null`; login requires a user ID. Known IDs are resolved using the email mapping in `data/app_users.csv`, joining subscriber profiles by normalized email. Unknown user IDs still create profiles with an `app:` external identity.
+
+Device identities are scoped to `app`. When a device identifies its user, its existing anonymous events merge into that user's profile. Anonymous events arriving after login also resolve through that device link, even if their timestamps precede login. Arrival order never overwrites event time; `last_seen` is the latest event timestamp. Conflicting app user identities are rejected atomically instead of merging two different accounts.
+
+Event IDs deduplicate persisted webhook events. The first delivery returns HTTP 201 with `{ "event_id": "...", "person_id": "...", "duplicate": false }`; retries return HTTP 200 and `duplicate: true`, retaining the first payload. Invalid payloads return HTTP 400 without creating identities or events. Device links and deduplication survive restarts. Properties are stored under the `app/` namespace, for example `app/story`, and event names are preserved as sent.
+
+Successful calls are immediately available from `/api/state`, `/api/people/:id`, and segment previews, and update Connection audience membership. Refresh the workspace to load the latest events in the UI; no server restart is needed for event ingestion. The development server remains bound to localhost.
+
 ## Import rules
 
 Files must be UTF-8 CSV with unique, nonempty headers; quoted commas, multiline fields, escaped quotes, BOMs, and CRLF are supported. The upload limit is 20 MB. Map at least one identity column (email, external ID, or visitor ID). For event imports also map a timestamp. A mapped event name is optional and defaults to `Page viewed`.

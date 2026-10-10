@@ -1,3 +1,4 @@
+import { appWebhook } from "./routes/app-webhook.js";
 import { handle as connections } from "./routes/connections.js";
 import http from "node:http";
 import { readFileSync, existsSync } from "node:fs";
@@ -17,6 +18,7 @@ const pages = new Set([
   "/connections",
 ]);
 export function createServer(cdp, root) {
+  const webhook = appWebhook(cdp, root);
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, "http://localhost");
@@ -32,6 +34,7 @@ export function createServer(cdp, root) {
         segments,
         exportPeople,
         connections,
+        webhook,
       ]) {
         if ((await handle(req, res, url, cdp)) !== false) return;
       }

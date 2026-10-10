@@ -28,7 +28,20 @@ export async function profile(id) {
           .slice(0, 200)
           .map(
             (e) =>
-              `<div class="timeline-item"><strong>${esc(e.name)}</strong><small>${date(e.timestamp)}</small><p>${esc(e.properties[`${e.source}/page`] || "")}<br>${new Date(e.timestamp).toLocaleTimeString()} · ${esc(e.source)}${e.properties[`${e.source}/utm_source`] ? ` · ${esc(e.properties[`${e.source}/utm_source`])}` : ""}</p></div>`,
+              `<div class="timeline-item"><strong>${esc(e.name)}</strong><small>${date(e.timestamp)}</small><p>${esc(e.properties[`${e.source}/page`] || "")}<br>${new Date(e.timestamp).toLocaleTimeString()} · ${esc(e.source)}${e.properties[`${e.source}/utm_source`] ? ` · ${esc(e.properties[`${e.source}/utm_source`])}` : ""}</p>${Object.entries(
+                e.properties,
+              )
+                .filter(
+                  ([key]) =>
+                    ![`${e.source}/page`, `${e.source}/utm_source`].includes(
+                      key,
+                    ),
+                )
+                .map(
+                  ([key, value]) =>
+                    `<p><strong>${esc(key)}:</strong> ${esc(typeof value === "object" ? JSON.stringify(value) : value)}</p>`,
+                )
+                .join("")}</div>`,
           )
           .join("") || '<p class="hint">No tracked events for this person.</p>'
       }${p.events.length > 200 ? '<p class="hint">Showing the latest 200 events.</p>' : ""}</div></section></div>`;

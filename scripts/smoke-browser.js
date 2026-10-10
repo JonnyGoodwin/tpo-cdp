@@ -377,6 +377,66 @@ try {
         p.email !== "connection-qa@example.com",
     ),
   );
+  const appEvent = {
+    event_id: "webhook-qa-anonymous",
+    event: "read_story",
+    user_id: null,
+    device_id: "webhook-qa-device",
+    timestamp: "2026-09-28T14:22:05Z",
+    properties: { story: "webhook-qa-story" },
+  };
+  const anonymousResponse = await page.request.post(base + "/webhooks/app", {
+    data: appEvent,
+  });
+  assert.equal(anonymousResponse.status(), 201);
+  const anonymousEvent = await anonymousResponse.json();
+  const loginResponse = await page.request.post(base + "/webhooks/app", {
+    data: {
+      ...appEvent,
+      event_id: "webhook-qa-login",
+      event: "login",
+      user_id: "u_2b6447a3",
+      timestamp: "2026-09-28T15:00:00Z",
+      properties: {},
+    },
+  });
+  assert.equal(loginResponse.status(), 201);
+  const loggedIn = await loginResponse.json();
+  assert.notEqual(loggedIn.person_id, anonymousEvent.person_id);
+  const lateResponse = await page.request.post(base + "/webhooks/app", {
+    data: {
+      ...appEvent,
+      event_id: "webhook-qa-late",
+      timestamp: "2026-09-28T13:00:00Z",
+    },
+  });
+  assert.equal((await lateResponse.json()).person_id, loggedIn.person_id);
+  const retryResponse = await page.request.post(base + "/webhooks/app", {
+    data: appEvent,
+  });
+  assert.equal(retryResponse.status(), 200);
+  assert.equal((await retryResponse.json()).duplicate, true);
+  const lookup = await (
+    await page.request.get(`${base}/api/people/${loggedIn.person_id}`)
+  ).json();
+  assert.equal(lookup.email, "julia.evans230@gmail.com");
+  assert.equal(
+    lookup.events.filter((event) => event.id.startsWith("app_webhook:")).length,
+    3,
+  );
+  const preview = await page.request.post(base + "/api/segments/preview", {
+    data: {
+      rules: [{ field: "event_count", op: "event", value: "webhook-qa-story" }],
+    },
+  });
+  assert.ok((await preview.json()).ids.includes(loggedIn.person_id));
+  await page.goto(base + "/people");
+  await page
+    .getByPlaceholder("Search by email, name, or identity…")
+    .fill("julia.evans230@gmail.com");
+  await page.locator("tbody tr[data-profile]").click();
+  await page.getByText("webhook-qa-story", { exact: false }).first().waitFor();
+  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#nav [data-view="overview"]').click();
   await page
