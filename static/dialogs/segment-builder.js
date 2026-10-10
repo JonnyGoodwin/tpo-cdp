@@ -50,7 +50,10 @@ function updateValueInput(key) {
   input.type = isDate ? "date" : "text";
   if (isDate) rule.value = dateInputValue(rule.value);
   input.value = rule.value || "";
-  input.disabled = ["known", "unknown"].includes(rule.op);
+  const noValue = ["known", "unknown"].includes(rule.op);
+  input.disabled = noValue;
+  input.hidden = noValue;
+  input.closest(".rule").classList.toggle("no-value", noValue);
 }
 export function openBuilder(id) {
   const s = state.data.segments.find((s) => s.id === id);
@@ -70,8 +73,9 @@ export function ruleMarkup(r, k, prefix = "") {
   if (r.rules)
     return `<div class="builder"><div class="builder-head">Group matches <select data-group-mode="${key}" aria-label="Group matching mode"><option value="all" ${r.mode === "all" ? "selected" : ""}>all</option><option value="any" ${r.mode === "any" ? "selected" : ""}>any</option></select> conditions <button class="close" data-remove-rule="${key}" aria-label="Remove group">×</button></div>${r.rules.map((v, n) => ruleMarkup(v, n, key)).join("")}<button class="button small" data-add-group-rule="${key}">＋ Add condition</button></div>`;
   const fields = ["email", "event_count", "last_seen", ...state.data.fields];
+  const noValue = ["known", "unknown"].includes(r.op);
   if (r.field && !fields.includes(r.field)) fields.push(r.field);
-  return `<div class="rule"><select data-rule-field="${key}" aria-label="Condition attribute">${fields.map((f) => `<option value="${esc(f)}" ${r.field === f ? "selected" : ""}>${esc(f.replaceAll("_", " "))}</option>`).join("")}</select><select data-rule-op="${key}" aria-label="Condition operator">${[
+  return `<div class="rule${noValue ? " no-value" : ""}"><select data-rule-field="${key}" aria-label="Condition attribute">${fields.map((f) => `<option value="${esc(f)}" ${r.field === f ? "selected" : ""}>${esc(f.replaceAll("_", " "))}</option>`).join("")}</select><select data-rule-op="${key}" aria-label="Condition operator">${[
     ["eq", "is equal to"],
     ["neq", "is not equal to"],
     ["contains", "contains"],
@@ -89,7 +93,7 @@ export function ruleMarkup(r, k, prefix = "") {
     )
     .join(
       "",
-    )}</select><input type="${usesDatePicker(r) ? "date" : "text"}" data-rule-value="${key}" aria-label="Condition value" value="${esc(usesDatePicker(r) ? dateInputValue(r.value) : r.value)}" ${["known", "unknown"].includes(r.op) ? "disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
+    )}</select><input type="${usesDatePicker(r) ? "date" : "text"}" data-rule-value="${key}" aria-label="Condition value" value="${esc(usesDatePicker(r) ? dateInputValue(r.value) : r.value)}" ${noValue ? "hidden disabled" : ""} placeholder="Value"><button class="close" data-remove-rule="${key}" aria-label="Remove condition">×</button></div>`;
 }
 export function ruleAt(key) {
   let rules = builder.definition.rules;

@@ -188,6 +188,9 @@
 .rule select {
   width: 100%;
 }
+.rule.no-value {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 30px;
+}
 .rule .close {
   font-size: 20px;
 }
