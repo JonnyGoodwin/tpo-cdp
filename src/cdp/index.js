@@ -4,24 +4,33 @@ import { profiles } from "./profiles.js";
 import { importCSV } from "./imports.js";
 import { matches, segments } from "./segments.js";
 export { parseCSV, defaultMapping } from "./csv.js";
-
 export class CDP extends Database {
   constructor(path) {
     super(path);
-    initialize(this);
+    this.ready = this.withSession(async () => {
+      await this.initialize();
+      await initialize(this);
+    });
   }
-  profiles() {
-    return profiles(this);
+  static async open(path) {
+    const cdp = new CDP(path);
+    await cdp.ready;
+    return cdp;
   }
-  importCSV(options) {
-    const result = importCSV(this, options);
-    if (!options.dryRun) sync(this);
-    return result;
+  async profiles() {
+    return await profiles(this);
+  }
+  async importCSV(options) {
+    return this.withSession(async () => {
+      const result = await importCSV(this, options);
+      if (!options.dryRun) await sync(this);
+      return result;
+    });
   }
   matches(profile, definition, now) {
     return matches(this, profile, definition, now);
   }
-  segments(people = this.profiles()) {
-    return segments(this, people);
+  async segments(people) {
+    return await segments(this, people);
   }
 }

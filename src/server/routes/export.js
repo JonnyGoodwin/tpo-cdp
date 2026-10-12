@@ -1,10 +1,10 @@
 import { body, csvCell } from "../http.js";
 export async function handle(req, res, url, cdp) {
   if (["GET", "POST"].includes(req.method) && url.pathname === "/api/export") {
-    let profiles = cdp.profiles();
+    let profiles = await cdp.profiles();
     const segmentId = url.searchParams.get("segment");
     if (segmentId) {
-      const s = cdp.get(
+      const s = await cdp.get(
         "SELECT definition FROM segments WHERE id=?",
         segmentId,
       );

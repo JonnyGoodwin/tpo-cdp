@@ -12,6 +12,6 @@ export async function handle(req, res, url, cdp) {
     });
   }
   if (req.method === "POST" && url.pathname === "/api/import")
-    return send(res, cdp.importCSV(await body(req)));
+    return send(res, await cdp.importCSV(await body(req)));
   return false;
 }

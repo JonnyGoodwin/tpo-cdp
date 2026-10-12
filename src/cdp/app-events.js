@@ -68,20 +68,22 @@ function validate(payload) {
     properties,
   };
 }
-export function ingestAppEvent(cdp, payload, users = new Map()) {
+async function ingestAppEventImpl(cdp, payload, users = new Map()) {
   const event = validate(payload);
   const id = `app_webhook:${event.eventId}`;
-  const existing = cdp.get("SELECT person_id FROM events WHERE id=?", id);
+  const existing = await cdp.get("SELECT person_id FROM events WHERE id=?", id);
   if (existing)
     return {
       event_id: event.eventId,
       person_id: existing.person_id,
       duplicate: true,
     };
-  cdp.db.exec("BEGIN");
+  await cdp.db.exec("BEGIN");
   let personId;
   try {
-    const identity = { anonymous_id: event.deviceId };
+    const identity = {
+      anonymous_id: event.deviceId,
+    };
     if (event.userId) {
       identity.external_id = event.userId;
       const email = users.get(event.userId);
@@ -91,9 +93,14 @@ export function ingestAppEvent(cdp, payload, users = new Map()) {
         identity.email = email;
       }
     }
-    personId = resolvePerson(cdp, { source: "app", identity }).id;
+    personId = (
+      await resolvePerson(cdp, {
+        source: "app",
+        identity,
+      })
+    ).id;
     if (identity.email)
-      cdp.run(
+      await cdp.run(
         "UPDATE people SET email=COALESCE(?,email) WHERE id=?",
         identity.email,
         personId,
@@ -104,7 +111,7 @@ export function ingestAppEvent(cdp, payload, users = new Map()) {
         value,
       ]),
     );
-    cdp.run(
+    await cdp.run(
       "INSERT INTO events VALUES(?,?,?,?,?,?)",
       id,
       personId,
@@ -113,11 +120,19 @@ export function ingestAppEvent(cdp, payload, users = new Map()) {
       event.timestamp,
       JSON.stringify(properties),
     );
-    cdp.db.exec("COMMIT");
+    await cdp.db.exec("COMMIT");
   } catch (error) {
-    cdp.db.exec("ROLLBACK");
+    await cdp.db.exec("ROLLBACK");
     throw error;
   }
-  sync(cdp);
-  return { event_id: event.eventId, person_id: personId, duplicate: false };
+  await sync(cdp);
+  return {
+    event_id: event.eventId,
+    person_id: personId,
+    duplicate: false,
+  };
+}
+
+export function ingestAppEvent(cdp, ...args) {
+  return cdp.withSession(() => ingestAppEventImpl(cdp, ...args));
 }

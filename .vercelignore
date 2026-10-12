@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+data/*.sqlite
+data/*.sqlite-*
+.git
+node_modules
+.agents
+.codex
+tests
+scripts
+skills-lock.json

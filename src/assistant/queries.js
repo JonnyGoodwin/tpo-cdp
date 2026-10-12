@@ -23,19 +23,27 @@ export function activityRange(rule, now = new Date()) {
     rule.window_days || 30,
   );
 }
-export function readingCount(cdp, personId, rule, now = new Date()) {
+export async function readingCount(cdp, personId, rule, now = new Date()) {
   const [from, to] = activityRange(rule, now);
-  return cdp.get(
-    "SELECT count(*) AS n FROM events WHERE person_id=? AND timestamp>=? AND timestamp<? AND name IN (?,?)",
-    personId,
-    from?.toISOString() || "0000",
-    to.toISOString(),
-    ...readingNames,
+  return (
+    await cdp.get(
+      "SELECT count(*) AS n FROM events WHERE person_id=? AND timestamp>=? AND timestamp<? AND name IN (?,?)",
+      personId,
+      from?.toISOString() || "0000",
+      to.toISOString(),
+      ...readingNames,
+    )
   ).n;
 }
 export function definitionFor(plan, now = new Date()) {
   validatePlan(plan);
-  const rules = [{ field: "subscribers/signup_date", op: "known", value: "" }];
+  const rules = [
+    {
+      field: "subscribers/signup_date",
+      op: "known",
+      value: "",
+    },
+  ];
   if (plan.channel !== "all")
     rules.push({
       field: "subscribers/acquisition_source",
@@ -68,7 +76,11 @@ export function definitionFor(plan, now = new Date()) {
       {
         mode: "any",
         rules: [
-          { field: "subscribers/last_open_date", op: "unknown", value: "" },
+          {
+            field: "subscribers/last_open_date",
+            op: "unknown",
+            value: "",
+          },
           {
             field: "subscribers/last_open_date",
             op: "older_than_days",
@@ -85,16 +97,19 @@ export function definitionFor(plan, now = new Date()) {
       window_days: plan.window_days,
       activity_period: plan.period === "all" ? "last_30_days" : plan.period,
     });
-  return { mode: "all", rules };
+  return {
+    mode: "all",
+    rules,
+  };
 }
 function displayDate(value) {
   return value && !Number.isNaN(Date.parse(value))
     ? new Date(value).toISOString().slice(0, 10)
     : "Not recorded";
 }
-export function runQuery(cdp, plan, now = new Date()) {
+export async function runQuery(cdp, plan, now = new Date()) {
   const definition = definitionFor(plan, now);
-  const all = cdp.profiles();
+  const all = await cdp.profiles();
   // Evaluate dynamic segment rules against the same clock used by this report.
   const members = all.filter((person) => cdp.matches(person, definition, now));
   const [activityFrom, activityTo] = timeRange(
@@ -102,7 +117,7 @@ export function runQuery(cdp, plan, now = new Date()) {
     now,
     plan.window_days,
   );
-  const activity = cdp.all(
+  const activity = await cdp.all(
     "SELECT person_id,count(*) AS reads,max(timestamp) AS last_read FROM events WHERE timestamp>=? AND timestamp<? AND name IN (?,?) GROUP BY person_id",
     activityFrom?.toISOString() || "0000",
     activityTo.toISOString(),
@@ -133,7 +148,7 @@ export function runQuery(cdp, plan, now = new Date()) {
     );
     const visited = new Set();
     const counts = new Map();
-    const events = cdp.all(
+    const events = await cdp.all(
       "SELECT person_id,timestamp,properties FROM events WHERE source='web' ORDER BY timestamp,id",
     );
     for (const event of events) {
@@ -159,7 +174,10 @@ export function runQuery(cdp, plan, now = new Date()) {
     rows = [...counts]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, plan.limit)
-      .map(([page, subscribers]) => ({ page, subscribers }));
+      .map(([page, subscribers]) => ({
+        page,
+        subscribers,
+      }));
     columns = ["page", "subscribers"];
     total = visited.size;
     assumptions.push(

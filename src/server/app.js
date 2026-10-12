@@ -10,6 +10,8 @@ import { handle as people } from "./routes/people.js";
 import { handle as imports } from "./routes/imports.js";
 import { handle as segments } from "./routes/segments.js";
 import { handle as exportPeople } from "./routes/export.js";
+import { waitUntil } from "@vercel/functions";
+import { processQueue } from "../connections/runner.js";
 const pages = new Set([
   "/",
   "/people",
@@ -23,24 +25,67 @@ export function createServer(cdp, root) {
   const webhook = appWebhook(cdp, root);
   const assistant = assistantRoutes(cdp);
   return http.createServer(async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
     try {
       const url = new URL(req.url, "http://localhost");
+      if (url.pathname === "/api/cron/connections") {
+        if (
+          req.method !== "GET" ||
+          !process.env.CRON_SECRET ||
+          req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`
+        )
+          return send(res, { error: "Unauthorized" }, 401);
+        await processQueue(cdp);
+        return send(res, { ok: true });
+      }
       if (req.method === "POST" || req.method === "DELETE") {
         const origin = req.headers.origin;
         if (origin && new URL(origin).host !== req.headers.host)
-          return send(res, { error: "Cross-origin writes are blocked" }, 403);
+          return send(
+            res,
+            {
+              error: "Cross-origin writes are blocked",
+            },
+            403,
+          );
       }
-      for (const handle of [
-        workspace,
-        people,
-        imports,
-        segments,
-        exportPeople,
-        connections,
-        webhook,
-        assistant,
-      ]) {
-        if ((await handle(req, res, url, cdp)) !== false) return;
+      let responseArgs;
+      const deferredResponse = {
+        writeHead: (...args) => res.writeHead(...args),
+        setHeader: (...args) => res.setHeader(...args),
+        end: (...args) => {
+          responseArgs = args;
+        },
+      };
+      const dispatch = async () => {
+        for (const handle of [
+          workspace,
+          people,
+          imports,
+          segments,
+          exportPeople,
+          connections,
+          webhook,
+          assistant,
+        ]) {
+          if ((await handle(req, deferredResponse, url, cdp)) !== false)
+            return true;
+        }
+        return false;
+      };
+      const handled =
+        url.pathname.startsWith("/api/") || url.pathname === "/webhooks/app"
+          ? await cdp.withSession(dispatch)
+          : false;
+      if (handled) {
+        if (
+          process.env.VERCEL &&
+          res.statusCode < 400 &&
+          (req.method === "POST" || url.pathname.startsWith("/api/connections"))
+        )
+          waitUntil(processQueue(cdp));
+        // Release database locks before ending the Vercel invocation.
+        return res.end(...(responseArgs || []));
       }
       if (req.method === "GET") {
         const staticRoot = resolve(root, "static");
@@ -65,9 +110,21 @@ export function createServer(cdp, root) {
           return res.end(readFileSync(file));
         }
       }
-      send(res, { error: "Not found" }, 404);
+      send(
+        res,
+        {
+          error: "Not found",
+        },
+        404,
+      );
     } catch (error) {
-      send(res, { error: error.message }, 400);
+      send(
+        res,
+        {
+          error: error.message,
+        },
+        400,
+      );
     }
   });
 }

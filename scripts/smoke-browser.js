@@ -9,7 +9,13 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dataDir = mkdtempSync(join(tmpdir(), "tpo-cdp-browser-"));
 const server = spawn(process.execPath, ["server.js"], {
   cwd: root,
-  env: { ...process.env, PORT: "0", CDP_DATA_DIR: dataDir, OPENAI_API_KEY: "" },
+  env: {
+    ...process.env,
+    PORT: "0",
+    CDP_DATA_DIR: dataDir,
+    OPENAI_API_KEY: "",
+    APP_WEBHOOK_SECRET: "browser-test-secret",
+  },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let browser;
@@ -386,12 +392,25 @@ try {
     timestamp: "2026-09-28T14:22:05Z",
     properties: { story: "webhook-qa-story" },
   };
+  for (const authorization of [
+    undefined,
+    "Bearer wrong-secret",
+    "browser-test-secret",
+  ]) {
+    const rejected = await page.request.post(base + "/webhooks/app", {
+      headers: authorization ? { Authorization: authorization } : {},
+      data: appEvent,
+    });
+    assert.equal(rejected.status(), 401);
+  }
   const anonymousResponse = await page.request.post(base + "/webhooks/app", {
+    headers: { Authorization: "Bearer browser-test-secret" },
     data: appEvent,
   });
   assert.equal(anonymousResponse.status(), 201);
   const anonymousEvent = await anonymousResponse.json();
   const loginResponse = await page.request.post(base + "/webhooks/app", {
+    headers: { Authorization: "Bearer browser-test-secret" },
     data: {
       ...appEvent,
       event_id: "webhook-qa-login",
@@ -405,6 +424,7 @@ try {
   const loggedIn = await loginResponse.json();
   assert.notEqual(loggedIn.person_id, anonymousEvent.person_id);
   const lateResponse = await page.request.post(base + "/webhooks/app", {
+    headers: { Authorization: "Bearer browser-test-secret" },
     data: {
       ...appEvent,
       event_id: "webhook-qa-late",
@@ -413,6 +433,7 @@ try {
   });
   assert.equal((await lateResponse.json()).person_id, loggedIn.person_id);
   const retryResponse = await page.request.post(base + "/webhooks/app", {
+    headers: { Authorization: "Bearer browser-test-secret" },
     data: appEvent,
   });
   assert.equal(retryResponse.status(), 200);

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "node",
+  "regions": ["iad1"],
+  "functions": {
+    "server.js": {
+      "maxDuration": 300,
+      "includeFiles": "{static/**,data/*.csv,src/connections/worker.js}"
+    }
+  },
+  "crons": [{ "path": "/api/cron/connections", "schedule": "* * * * *" }]
+}

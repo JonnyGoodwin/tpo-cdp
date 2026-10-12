@@ -4,7 +4,6 @@ import { CDP, parseCSV, defaultMapping } from "../src/cdp/index.js";
 import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 test("CSV handles BOM, CRLF, escaped quotes and embedded newlines", () => {
   const csv = parseCSV(
     '\ufeffemail,note\r\na@b.com,"hello, ""reader""\nnext line"\r\n',
@@ -13,174 +12,233 @@ test("CSV handles BOM, CRLF, escaped quotes and embedded newlines", () => {
   assert.throws(() => parseCSV("a,a\n1,2"), /unique/);
   assert.throws(() => parseCSV('a\n"broken'), /unclosed/);
 });
-test("dry run rolls back and email updates are normalized and persistent", () => {
+test("dry run rolls back and email updates are normalized and persistent", async () => {
   const path = mkdtempSync(join(tmpdir(), "cdp-test-"));
-  const db = new CDP(join(path, "test.sqlite"));
+  const db = await CDP.open(join(path, "test.sqlite"));
   const payload = {
     source: "crm",
     text: "email,name,score\nA@EXAMPLE.COM,Alice,10",
     mapping: [
-      { column: "email", target: "email", type: "string" },
-      { column: "name", target: "name", type: "string" },
-      { column: "score", target: "trait", name: "score", type: "number" },
+      {
+        column: "email",
+        target: "email",
+        type: "string",
+      },
+      {
+        column: "name",
+        target: "name",
+        type: "string",
+      },
+      {
+        column: "score",
+        target: "trait",
+        name: "score",
+        type: "number",
+      },
     ],
   };
-  assert.equal(db.importCSV({ ...payload, dryRun: true }).created, 1);
-  assert.equal(db.profiles().length, 0);
-  assert.equal(db.all("SELECT * FROM imports").length, 0);
-  db.importCSV(payload);
-  assert.equal(db.importCSV(payload).created, 0);
-  assert.equal(db.profiles()[0].email, "a@example.com");
-  assert.equal(db.profiles()[0].traits["crm/score"], 10);
+  assert.equal(
+    (
+      await db.importCSV({
+        ...payload,
+        dryRun: true,
+      })
+    ).created,
+    1,
+  );
+  assert.equal((await db.profiles()).length, 0);
+  assert.equal((await db.all("SELECT * FROM imports")).length, 0);
+  await db.importCSV(payload);
+  assert.equal((await db.importCSV(payload)).created, 0);
+  assert.equal((await db.profiles())[0].email, "a@example.com");
+  assert.equal((await db.profiles())[0].traits["crm/score"], 10);
   db.db.close();
-  const reopened = new CDP(join(path, "test.sqlite"));
-  assert.equal(reopened.profiles().length, 1);
+  const reopened = await CDP.open(join(path, "test.sqlite"));
+  assert.equal((await reopened.profiles()).length, 1);
   reopened.db.close();
-  rmSync(path, { recursive: true });
+  rmSync(path, {
+    recursive: true,
+  });
 });
-test("identifying a visitor merges anonymous browsing history and repeated events dedupe", () => {
-  const db = new CDP();
-  db.importCSV({ source: "crm", text: "email\nreader@example.com" });
+test("identifying a visitor merges anonymous browsing history and repeated events dedupe", async () => {
+  const db = await CDP.open();
+  await db.importCSV({
+    source: "crm",
+    text: "email\nreader@example.com",
+  });
   const first = {
     source: "web",
     type: "events",
     text: "visitor_id,email,timestamp,page\nv1,,2026-09-01T00:00:00Z,/",
   };
-  db.importCSV(first);
-  assert.equal(db.profiles().length, 2);
+  await db.importCSV(first);
+  assert.equal((await db.profiles()).length, 2);
   assert.equal(
-    db.importCSV({
-      ...first,
-      text: "visitor_id,email,timestamp,page\nv1,reader@example.com,2026-09-02T00:00:00Z,/subscribe",
-    }).merged,
+    (
+      await db.importCSV({
+        ...first,
+        text: "visitor_id,email,timestamp,page\nv1,reader@example.com,2026-09-02T00:00:00Z,/subscribe",
+      })
+    ).merged,
     1,
   );
-  assert.equal(db.profiles().length, 1);
-  assert.equal(db.profiles()[0].event_count, 2);
-  assert.equal(db.importCSV(first).duplicates, 1);
-  assert.equal(db.profiles()[0].event_count, 2);
+  assert.equal((await db.profiles()).length, 1);
+  assert.equal((await db.profiles())[0].event_count, 2);
+  assert.equal((await db.importCSV(first)).duplicates, 1);
+  assert.equal((await db.profiles())[0].event_count, 2);
   db.db.close();
 });
-test("conflicting IDs and invalid rows are rejected without partial profile changes", () => {
-  const db = new CDP();
-  db.importCSV({
+test("conflicting IDs and invalid rows are rejected without partial profile changes", async () => {
+  const db = await CDP.open();
+  await db.importCSV({
     source: "app",
     text: "user_id,email\nu1,a@example.com\nu2,b@example.com",
   });
-  const r = db.importCSV({
+  const r = await db.importCSV({
     source: "app",
     text: "user_id,email\nu2,a@example.com\nu3,broken\nu4,c@example.com",
   });
   assert.equal(r.rejected, 2);
   assert.equal(r.created, 1);
-  assert.equal(db.profiles().length, 3);
+  assert.equal((await db.profiles()).length, 3);
   assert.equal(
-    db.profiles().find((p) => p.email === "a@example.com").identities.length,
+    (await db.profiles()).find((p) => p.email === "a@example.com").identities
+      .length,
     2,
   );
   db.db.close();
 });
-test("a visitor cannot merge conflicting app identities through another source", () => {
-  const db = new CDP();
-  db.importCSV({
+test("a visitor cannot merge conflicting app identities through another source", async () => {
+  const db = await CDP.open();
+  await db.importCSV({
     source: "app",
     text: "user_id,email\nu1,a@example.com\nu2,b@example.com",
   });
-  db.importCSV({
+  await db.importCSV({
     source: "web",
     type: "events",
     text: "visitor_id,email,timestamp\nv1,a@example.com,2026-09-01",
   });
-  const result = db.importCSV({
+  const result = await db.importCSV({
     source: "web",
     type: "events",
     text: "visitor_id,email,timestamp\nv1,b@example.com,2026-09-02",
   });
   assert.equal(result.rejected, 1);
-  assert.equal(db.profiles().length, 2);
-  assert.equal(db.get("SELECT count(*) AS n FROM events").n, 1);
+  assert.equal((await db.profiles()).length, 2);
+  assert.equal((await db.get("SELECT count(*) AS n FROM events")).n, 1);
   db.db.close();
 });
-test("invalid typed values do not write identities; duplicate mapping roles fail early", () => {
-  const db = new CDP();
+test("invalid typed values do not write identities; duplicate mapping roles fail early", async () => {
+  const db = await CDP.open();
   const text = "email,score\na@example.com,broken\nb@example.com,12";
   const mapping = defaultMapping(parseCSV(text).headers).map((m) => ({
     ...m,
     type: m.column === "score" ? "number" : m.type,
   }));
-  const result = db.importCSV({ source: "crm", text, mapping });
+  const result = await db.importCSV({
+    source: "crm",
+    text,
+    mapping,
+  });
   assert.equal(result.created, 1);
   assert.equal(result.rejected, 1);
-  assert.equal(db.profiles()[0].email, "b@example.com");
-  assert.throws(
-    () =>
-      db.importCSV({
+  assert.equal((await db.profiles())[0].email, "b@example.com");
+  await assert.rejects(
+    async () =>
+      await db.importCSV({
         source: "crm",
         text,
-        mapping: mapping.map((m) => ({ ...m, target: "email" })),
+        mapping: mapping.map((m) => ({
+          ...m,
+          target: "email",
+        })),
       }),
     /one column/,
   );
   db.db.close();
 });
-test("typed traits, empty updates, nested segments and event predicates", () => {
-  const db = new CDP();
+test("typed traits, empty updates, nested segments and event predicates", async () => {
+  const db = await CDP.open();
   const text =
     "email,status,score\na@example.com,active,8\nb@example.com,unsubscribed,2";
   const mapping = defaultMapping(parseCSV(text).headers).map((m) => ({
     ...m,
     type: m.column === "score" ? "number" : m.type,
   }));
-  db.importCSV({ source: "crm", text, mapping });
-  db.importCSV({ source: "crm", text: "email,status\na@example.com," });
+  await db.importCSV({
+    source: "crm",
+    text,
+    mapping,
+  });
+  await db.importCSV({
+    source: "crm",
+    text: "email,status\na@example.com,",
+  });
   const definition = {
     mode: "all",
     rules: [
-      { field: "crm/status", op: "eq", value: "active" },
+      {
+        field: "crm/status",
+        op: "eq",
+        value: "active",
+      },
       {
         mode: "any",
         rules: [
-          { field: "crm/score", op: "gt", value: 5 },
-          { field: "email", op: "unknown" },
+          {
+            field: "crm/score",
+            op: "gt",
+            value: 5,
+          },
+          {
+            field: "email",
+            op: "unknown",
+          },
         ],
       },
     ],
   };
   assert.equal(
-    db.profiles().filter((p) => db.matches(p, definition)).length,
+    (await db.profiles()).filter((p) => db.matches(p, definition)).length,
     1,
   );
-  db.importCSV({
+  await db.importCSV({
     source: "web",
     type: "events",
     text: "email,timestamp,page\na@example.com,2026-09-01,/subscribe",
   });
   assert.equal(
-    db
-      .profiles()
-      .filter((p) =>
-        db.matches(p, { rules: [{ op: "event", value: "/subscribe" }] }),
-      ).length,
+    (await db.profiles()).filter((p) =>
+      db.matches(p, {
+        rules: [
+          {
+            op: "event",
+            value: "/subscribe",
+          },
+        ],
+      }),
+    ).length,
     1,
   );
   db.db.close();
 });
-test("supplied datasets import, stitch identities, and reimport without duplicate events", () => {
-  const db = new CDP();
+test("supplied datasets import, stitch identities, and reimport without duplicate events", async () => {
+  const db = await CDP.open();
   for (const [file, source, type] of [
     ["subscribers.csv", "subscribers", "people"],
     ["app_users.csv", "app", "people"],
     ["web_events.csv", "web", "events"],
   ]) {
-    const result = db.importCSV({
+    const result = await db.importCSV({
       text: readFileSync(new URL("../data/" + file, import.meta.url), "utf8"),
       source,
       type,
     });
     assert.equal(result.rejected, file === "subscribers.csv" ? 10 : 0);
   }
-  const profiles = db.profiles();
-  assert.equal(db.get("SELECT count(*) AS n FROM events").n, 10000);
+  const profiles = await db.profiles();
+  assert.equal((await db.get("SELECT count(*) AS n FROM events")).n, 10000);
   assert.equal(profiles.filter((p) => p.traits["app/created_at"]).length, 930);
   assert.ok(
     profiles.some(
@@ -190,7 +248,7 @@ test("supplied datasets import, stitch identities, and reimport without duplicat
         p.event_count,
     ),
   );
-  const again = db.importCSV({
+  const again = await db.importCSV({
     text: readFileSync(
       new URL("../data/web_events.csv", import.meta.url),
       "utf8",
@@ -207,13 +265,24 @@ test("supplied datasets import, stitch identities, and reimport without duplicat
   });
   db.db.close();
 });
-
-test("calendar-day equality matches imported date timestamps without changing precise timestamp comparisons", () => {
-  const db = new CDP();
+test("calendar-day equality matches imported date timestamps without changing precise timestamp comparisons", async () => {
+  const db = await CDP.open();
   try {
-    const person = { traits: { "app/created_at": "2026-10-09T14:30:00.000Z" } };
+    const person = {
+      traits: {
+        "app/created_at": "2026-10-09T14:30:00.000Z",
+      },
+    };
     const matches = (op, value) =>
-      db.matches(person, { rules: [{ field: "app/created_at", op, value }] });
+      db.matches(person, {
+        rules: [
+          {
+            field: "app/created_at",
+            op,
+            value,
+          },
+        ],
+      });
     assert.equal(matches("eq", "2026-10-09"), true);
     assert.equal(matches("eq", "2026-10-08"), false);
     assert.equal(matches("neq", "2026-10-09"), false);

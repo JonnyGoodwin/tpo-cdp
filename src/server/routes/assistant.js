@@ -9,7 +9,6 @@ import { runQuery } from "../../assistant/queries.js";
 import { sync } from "../../connections/store.js";
 import { chatReply } from "../../assistant/conversation.js";
 export function assistantRoutes(cdp) {
-  const reports = new Map();
   return async (req, res, url) => {
     if (req.method === "GET" && url.pathname === "/api/assistant/status")
       return send(res, {
@@ -20,20 +19,25 @@ export function assistantRoutes(cdp) {
       const { question, context } = await body(req);
       const reply = chatReply(question);
       if (reply) return send(res, reply);
-      const planned = await planQuestion(question, { context });
+      const planned = await planQuestion(question, {
+        context,
+      });
       if (planned.clarification) return send(res, planned);
       const now = new Date();
-      const result = runQuery(cdp, planned.plan, now);
+      const result = await runQuery(cdp, planned.plan, now);
       const reportId = randomUUID();
-      for (const [id, report] of reports)
-        if (report.expires < Date.now()) reports.delete(id);
-      if (reports.size >= 100) reports.delete(reports.keys().next().value);
+      await cdp.run(
+        "DELETE FROM assistant_reports WHERE expires<?",
+        new Date().toISOString(),
+      );
       if (result.definition)
-        reports.set(reportId, {
-          plan: planned.plan,
-          definition: result.definition,
-          expires: Date.now() + 30 * 60000,
-        });
+        await cdp.run(
+          "INSERT INTO assistant_reports VALUES(?,?,?,?)",
+          reportId,
+          JSON.stringify(planned.plan),
+          JSON.stringify(result.definition),
+          new Date(Date.now() + 30 * 60000).toISOString(),
+        );
       const { definition, ...publicResult } = result;
       return send(res, {
         ...publicResult,
@@ -48,7 +52,15 @@ export function assistantRoutes(cdp) {
     }
     if (req.method === "POST" && url.pathname === "/api/assistant/segments") {
       const { report_id: reportId, name } = await body(req);
-      const report = reports.get(reportId);
+      const stored = await cdp.get(
+        "SELECT * FROM assistant_reports WHERE id=?",
+        reportId,
+      );
+      const report = stored && {
+        plan: JSON.parse(stored.plan),
+        definition: JSON.parse(stored.definition),
+        expires: Date.parse(stored.expires),
+      };
       if (!report || report.expires < Date.now())
         throw new Error(
           "This preview expired. Ask the question again before saving.",
@@ -58,15 +70,17 @@ export function assistantRoutes(cdp) {
       validatePlan(report.plan);
       const definition = report.definition;
       const id = randomUUID();
-      cdp.run(
+      await cdp.run(
         "INSERT INTO segments VALUES(?,?,?)",
         id,
         name.trim(),
         JSON.stringify(definition),
       );
-      reports.delete(reportId);
-      sync(cdp);
-      return send(res, { id });
+      await cdp.run("DELETE FROM assistant_reports WHERE id=?", reportId);
+      await sync(cdp);
+      return send(res, {
+        id,
+      });
     }
     return false;
   };

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.13"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env server.js",
@@ -11,10 +11,15 @@
     "test": "node --test",
     "test:browser": "node scripts/smoke-browser.js",
     "format": "prettier --write server.js src static scripts tests package.json README.md",
-    "format:check": "prettier --check server.js src static scripts tests package.json README.md"
+    "format:check": "prettier --check server.js src static scripts tests package.json README.md",
+    "db:migrate": "node --env-file-if-exists=.env.local --env-file-if-exists=.env scripts/migrate-postgres.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "prettier": "^3.9.9"
+  },
+  "dependencies": {
+    "@vercel/functions": "^3.9.11",
+    "pg": "^8.23.1"
   }
 }

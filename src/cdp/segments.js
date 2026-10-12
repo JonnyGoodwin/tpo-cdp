@@ -1,4 +1,4 @@
-import { readingCount } from "../assistant/queries.js";
+import { activityRange, readingNames } from "../assistant/queries.js";
 export function matches(cdp, p, definition, now = new Date()) {
   const rules = definition.rules || [];
   const test = (r) => {
@@ -8,7 +8,15 @@ export function matches(cdp, p, definition, now = new Date()) {
         ? p.email
         : r.field === "event_count"
           ? r.window_days
-            ? readingCount(cdp, p.id, r, now)
+            ? (() => {
+                const [from, to] = activityRange(r, now);
+                return (p.activity || []).filter(
+                  (event) =>
+                    readingNames.includes(event.name) &&
+                    event.timestamp >= (from?.toISOString() || "0000") &&
+                    event.timestamp < to.toISOString(),
+                ).length;
+              })()
             : p.event_count
           : r.field === "last_seen"
             ? p.last_seen
@@ -54,13 +62,11 @@ export function matches(cdp, p, definition, now = new Date()) {
       case "before":
         return Date.parse(value) < Date.parse(want);
       case "event":
-        return cdp
-          .all("SELECT name,properties FROM events WHERE person_id=?", p.id)
-          .some((e) =>
-            [e.name, ...Object.values(JSON.parse(e.properties))].some((v) =>
-              String(v).toLowerCase().includes(String(want).toLowerCase()),
-            ),
-          );
+        return (p.activity || []).some((e) =>
+          [e.name, ...Object.values(JSON.parse(e.properties))].some((v) =>
+            String(v).toLowerCase().includes(String(want).toLowerCase()),
+          ),
+        );
       default:
         throw new Error("Unknown filter operator");
     }
@@ -70,8 +76,9 @@ export function matches(cdp, p, definition, now = new Date()) {
     (definition.mode === "any" ? rules.some(test) : rules.every(test))
   );
 }
-export function segments(cdp, profiles = cdp.profiles()) {
-  return cdp.all("SELECT * FROM segments").map((s) => ({
+export async function segments(cdp, profiles) {
+  profiles ||= await cdp.profiles();
+  return (await cdp.all("SELECT * FROM segments")).map((s) => ({
     ...s,
     definition: JSON.parse(s.definition),
     count: profiles.filter((p) => cdp.matches(p, JSON.parse(s.definition)))
